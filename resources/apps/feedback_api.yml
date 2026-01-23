@@ -1,0 +1,26 @@
+resources:
+  apps:
+    feedback_api:
+      name: ${var.app_name}
+      description: Feedback API service
+      source_code_path: ../../app
+      env:
+        FEEDBACK_TABLE: ${var.feedback_table}
+        DATABRICKS_WAREHOUSE_ID: ${var.warehouse_id}
+        TRACE_TABLE: ${var.trace_table}
+        LINK_WINDOW_SECONDS: ${var.link_window_seconds}
+        LINK_MAX_CANDIDATES: ${var.link_max_candidates}
+        RATE_LIMIT_WINDOW_SECONDS: ${var.rate_limit_window_seconds}
+        RATE_LIMIT_PER_USER: ${var.rate_limit_per_user}
+        RATE_LIMIT_PER_TOKEN: ${var.rate_limit_per_token}
+        RATE_LIMIT_PER_IP: ${var.rate_limit_per_ip}
+        LOG_LEVEL: ${var.log_level}
+        SQL_WAIT_TIMEOUT: ${var.sql_wait_timeout}
+        SQL_EXEC_RETRIES: ${var.sql_exec_retries}
+        SQL_EXEC_BACKOFF_SECONDS: ${var.sql_exec_backoff_seconds}
+        TRACE_ID_POLICY: ${var.trace_id_policy}
+        TRACE_ID_REGEX: ${var.trace_id_regex}
+        TRACE_ID_MAX_AGE_SECONDS: ${var.trace_id_max_age_seconds}
+        TRACKING_ID_POLICY: ${var.tracking_id_policy}
+        TRACKING_ID_REGEX: ${var.tracking_id_regex}
+        TRACKING_ID_UNIQUENESS_SECONDS: ${var.tracking_id_uniqueness_seconds}

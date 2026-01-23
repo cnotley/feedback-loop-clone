@@ -1,0 +1,11 @@
+resources:
+  jobs:
+    feedback-table-ddl:
+      name: feedback-table-ddl
+      tasks:
+        - task_key: create-feedback-table
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../../sql/feedback_table.sql
+              source: WORKSPACE

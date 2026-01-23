@@ -1,0 +1,82 @@
+bundle:
+  name: feedback-loop
+
+variables:
+  cluster_id:
+    description: "Cluster ID for jobs"
+    default: ""
+  warehouse_id:
+    description: "SQL Warehouse ID for ingestion"
+    default: "b351b2bbacf09043"
+  app_name:
+    description: "Databricks App name"
+    default: "feedback-api"
+  feedback_table:
+    description: "Fully qualified feedback table"
+    default: "llm_sandbox.voice_to_soap.feedback_ingest"
+  trace_table:
+    description: "Fully qualified trace table for run linking"
+    default: ""
+  link_window_seconds:
+    description: "Linking time window in seconds"
+    default: 3600
+  link_max_candidates:
+    description: "Max candidates to consider for best-match linking"
+    default: 5
+  rate_limit_window_seconds:
+    description: "Rate limit window in seconds"
+    default: 60
+  rate_limit_per_user:
+    description: "Max requests per user per window"
+    default: 60
+  rate_limit_per_token:
+    description: "Max requests per token per window"
+    default: 120
+  rate_limit_per_ip:
+    description: "Max requests per IP per window"
+    default: 300
+  log_level:
+    description: "Log level for observability output"
+    default: "INFO"
+  sql_wait_timeout:
+    description: "SQL statement wait timeout"
+    default: "10s"
+  sql_exec_retries:
+    description: "Number of retries for SQL execution"
+    default: 2
+  sql_exec_backoff_seconds:
+    description: "Base backoff in seconds for SQL retries"
+    default: 0.5
+  trace_id_policy:
+    description: "Trace ID policy: off|warn|strict"
+    default: "warn"
+  trace_id_regex:
+    description: "Optional regex for trace_id format"
+    default: ""
+  trace_id_max_age_seconds:
+    description: "Optional max age for trace_id in seconds"
+    default: ""
+  tracking_id_policy:
+    description: "Tracking ID policy: off|warn|strict"
+    default: "warn"
+  tracking_id_regex:
+    description: "Optional regex for tracking_id format"
+    default: ""
+  tracking_id_uniqueness_seconds:
+    description: "Optional uniqueness window for tracking_id in seconds"
+    default: ""
+
+include:
+  - resources/apps/*.yml
+  - resources/jobs/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+  prod:
+    mode: production
+    workspace:
+    variables:
+      feedback_table: "llm_prod.voice_to_soap.feedback_ingest"
