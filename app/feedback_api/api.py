@@ -302,7 +302,7 @@ def create_app() -> FastAPI:
                     "details": ["payload_hash already ingested"],
                 },
             )
-        except Exception as exc:  # pragma: no cover - runtime environment specific
+        except Exception as exc:
             metrics.inc("ingestion_failed")
             log_event(
                 {

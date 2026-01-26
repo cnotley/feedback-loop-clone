@@ -41,10 +41,6 @@ class RateLimitConfig:
 
 
 class RateLimiter:
-    """In-memory rate limiter (fixed window).
-
-    Note: This is per-process only. For multi-instance deployments, use a shared store.
-    """
 
     def __init__(self, config: Optional[RateLimitConfig] = None) -> None:
         self.config = config or RateLimitConfig.from_env()

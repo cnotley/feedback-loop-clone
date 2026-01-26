@@ -88,7 +88,7 @@ def execute_statement(statement: str, warehouse_id: str) -> List[List]:
             result = getattr(resp, "result", None)
             rows = getattr(result, "data_array", None) if result else None
             return rows or []
-        except Exception as exc:  # pragma: no cover - retryable external dependency
+        except Exception as exc:
             last_exc = exc
             if attempt >= retries:
                 break
