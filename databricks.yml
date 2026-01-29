@@ -2,9 +2,6 @@ bundle:
   name: feedback-loop
 
 variables:
-  cluster_id:
-    description: "Cluster ID for jobs"
-    default: ""
   warehouse_id:
     description: "SQL Warehouse ID for ingestion"
     default: "b351b2bbacf09043"
@@ -16,13 +13,7 @@ variables:
     default: "llm_sandbox.voice_to_soap.feedback_ingest"
   trace_table:
     description: "Fully qualified trace table for run linking"
-    default: ""
-  link_window_seconds:
-    description: "Linking time window in seconds"
-    default: 3600
-  link_max_candidates:
-    description: "Max candidates to consider for best-match linking"
-    default: 5
+    default: "llm_sandbox.inference_tables.trace_logs_2024551179173857"
   rate_limit_window_seconds:
     description: "Rate limit window in seconds"
     default: 60
@@ -65,6 +56,18 @@ variables:
   tracking_id_uniqueness_seconds:
     description: "Optional uniqueness window for tracking_id in seconds"
     default: ""
+  trace_index_table:
+    description: "Trace index table for streaming linking"
+    default: "llm_sandbox.inference_tables.trace_index_feedback_linking"
+  link_stream_checkpoint:
+    description: "Checkpoint location for streaming linking job"
+    default: "dbfs:/tmp/feedback-linking-stream-v2"
+  link_stream_trigger_seconds:
+    description: "Streaming trigger interval in seconds"
+    default: 60
+  link_stream_watermark_minutes:
+    description: "Watermark (minutes) for trace stream lateness"
+    default: 15
 
 include:
   - resources/apps/*.yml

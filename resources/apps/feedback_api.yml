@@ -1,6 +1,9 @@
 resources:
   apps:
     feedback_api:
+      permissions:
+        - level: CAN_USE
+          user_name: Philip-Mathieu@idexx.com
       name: ${var.app_name}
       description: Feedback API service
       source_code_path: ../../app
@@ -8,8 +11,6 @@ resources:
         FEEDBACK_TABLE: ${var.feedback_table}
         DATABRICKS_WAREHOUSE_ID: ${var.warehouse_id}
         TRACE_TABLE: ${var.trace_table}
-        LINK_WINDOW_SECONDS: ${var.link_window_seconds}
-        LINK_MAX_CANDIDATES: ${var.link_max_candidates}
         RATE_LIMIT_WINDOW_SECONDS: ${var.rate_limit_window_seconds}
         RATE_LIMIT_PER_USER: ${var.rate_limit_per_user}
         RATE_LIMIT_PER_TOKEN: ${var.rate_limit_per_token}

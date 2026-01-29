@@ -1,14 +1,7 @@
-# This workflow validates, deploys, and runs the specified bundle
-# Added SP
-# within a pre-production target named "qa".
 name: "Validate and Deploy DAB"
 
-# Ensure that only a single job or workflow using the same concurrency group
-# runs at a time.
 concurrency: 1
 
-# Trigger this workflow whenever a merge is happened
-# main branch or an existing pull request's head branch is updated.
 on:
   push:
     branches:
@@ -16,10 +9,6 @@ on:
       - develop
 
 jobs:
-# Used by the "pipeline_update" job to deploy the bundle.
-# Bundle validation is automatically performed as part of this deployment.
-# If validation fails, this workflow fails.
-
   validate:
     name: "Validate asset bundle"
     runs-on: ubuntu-latest
@@ -30,8 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Download the Databricks CLI.
-      # See https://github.com/databricks/setup-cli
       - name: setup databricks
         uses: databricks/setup-cli@main
 
@@ -58,8 +45,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Download the Databricks CLI.
-      # See https://github.com/databricks/setup-cli
       - name: setup databricks
         uses: databricks/setup-cli@main
 

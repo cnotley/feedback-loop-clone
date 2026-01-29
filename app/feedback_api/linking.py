@@ -21,45 +21,32 @@ def _get_int_env(name: str, default: int) -> int:
         raise RuntimeError(f"Invalid int for env var {name}: {raw}") from exc
 
 
-def _fetch_best_match(
-    payload: FeedbackPayload,
+def _fetch_tracking_id_match(
+    tracking_id: str,
     trace_table: str,
     warehouse_id: str,
-    window_seconds: int,
-    max_candidates: int,
 ) -> Tuple[Optional[str], int]:
-    window = timedelta(seconds=window_seconds)
-    payload_ts = payload.timestamp
-    if payload_ts.tzinfo is None:
-        payload_ts = payload_ts.replace(tzinfo=timezone.utc)
-    start = (payload_ts - window).isoformat()
-    end = (payload_ts + window).isoformat()
-    payload_ts_literal = sql_literal(payload_ts.isoformat())
-
-    order_by_parts = []
-    if payload.tracking_id:
-        order_by_parts.append(
-            "CASE WHEN tags['tracking_id'] = "
-            f"{sql_literal(payload.tracking_id)} THEN 0 ELSE 1 END"
-        )
-    order_by_parts.append(
-        f"ABS(TIMESTAMPDIFF(SECOND, request_time, {payload_ts_literal}))"
-    )
-    order_by = ", ".join(order_by_parts)
-
-    statement = f"""
-    SELECT trace_id, tags['tracking_id'], tags['mlflow.user'], request_time
+    count_statement = f"""
+    SELECT COUNT(1)
     FROM {trace_table}
-    WHERE tags['mlflow.user'] = {sql_literal(payload.user_id)}
-      AND request_time BETWEEN {sql_literal(start)} AND {sql_literal(end)}
-    ORDER BY {order_by}
-    LIMIT {max_candidates}
+    WHERE tags['tracking_id'] = {sql_literal(tracking_id)}
     """
-    rows = execute_statement(statement, warehouse_id)
-    if not rows:
+    count_rows = execute_statement(count_statement, warehouse_id)
+    match_count = int(count_rows[0][0]) if count_rows and count_rows[0] else 0
+    if match_count == 0:
         return None, 0
-    best_trace_id = rows[0][0]
-    return best_trace_id, len(rows)
+
+    latest_statement = f"""
+    SELECT trace_id, request_time
+    FROM {trace_table}
+    WHERE tags['tracking_id'] = {sql_literal(tracking_id)}
+    ORDER BY request_time DESC
+    LIMIT 1
+    """
+    rows = execute_statement(latest_statement, warehouse_id)
+    if not rows:
+        return None, match_count
+    return rows[0][0], match_count
 
 
 def _trace_id_exists(trace_table: str, warehouse_id: str, trace_id: str) -> bool:
@@ -96,115 +83,80 @@ def get_trace_timestamp(
 
 
 def link_run(payload: FeedbackPayload) -> Dict[str, Optional[str]]:
-    """Link feedback to a model run using trace-first policy.
+    trace_table = os.environ.get("TRACE_TABLE")
+    warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID")
 
-    Policy:
-    - If trace_id is present, use it as the linkage key.
-    - Otherwise, attempt best-match within a time window and same user_id.
-    """
     if payload.trace_id:
-        trace_table = os.environ.get("TRACE_TABLE")
-        warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID")
         if not trace_table or not warehouse_id:
             return {
-                "link_mode": "trace_id_unverified",
-                "link_target_trace_id": payload.trace_id,
+                "link_mode": "no_match",
+                "link_target_trace_id": None,
                 "link_window_seconds": None,
-                "link_match_count": None,
+                "link_match_count": 0,
                 "link_reason": "trace_table_unconfigured",
             }
         try:
             if _trace_id_exists(trace_table, warehouse_id, payload.trace_id):
                 return {
-                    "link_mode": "trace_id",
+                    "link_mode": "trace_id_match",
                     "link_target_trace_id": payload.trace_id,
                     "link_window_seconds": None,
-                    "link_match_count": None,
+                    "link_match_count": 1,
                     "link_reason": "trace_id_verified",
                 }
-            return {
-                "link_mode": "trace_id_not_found",
-                "link_target_trace_id": payload.trace_id,
-                "link_window_seconds": None,
-                "link_match_count": 0,
-                "link_reason": "trace_id_not_found",
-            }
         except Exception as exc:
             return {
-                "link_mode": "trace_id_unverified",
-                "link_target_trace_id": payload.trace_id,
+                "link_mode": "no_match",
+                "link_target_trace_id": None,
                 "link_window_seconds": None,
-                "link_match_count": None,
+                "link_match_count": 0,
                 "link_reason": f"trace_lookup_failed:{exc}",
             }
 
-    window_seconds = _get_int_env("LINK_WINDOW_SECONDS", DEFAULT_LINK_WINDOW_SECONDS)
-    max_candidates = _get_int_env("LINK_MAX_CANDIDATES", DEFAULT_LINK_MAX_CANDIDATES)
-
-    if not payload.user_id:
+    if not payload.tracking_id:
         return {
-            "link_mode": "unlinked",
+            "link_mode": "no_match",
             "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
+            "link_window_seconds": None,
             "link_match_count": 0,
-            "link_reason": "missing_user_id",
+            "link_reason": "missing_tracking_id",
         }
 
-    trace_table = os.environ.get("TRACE_TABLE")
-    if not trace_table:
+    if not trace_table or not warehouse_id:
         return {
-            "link_mode": "best_match_unresolved",
+            "link_mode": "no_match",
             "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
+            "link_window_seconds": None,
             "link_match_count": 0,
             "link_reason": "trace_table_unconfigured",
         }
 
-    warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID")
-    if not warehouse_id:
-        return {
-            "link_mode": "best_match_unresolved",
-            "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
-            "link_match_count": 0,
-            "link_reason": "warehouse_unconfigured",
-        }
-
     try:
-        best_trace_id, match_count = _fetch_best_match(
-            payload, trace_table, warehouse_id, window_seconds, max_candidates
+        best_trace_id, match_count = _fetch_tracking_id_match(
+            payload.tracking_id, trace_table, warehouse_id
         )
     except Exception as exc:
         return {
-            "link_mode": "best_match_unresolved",
+            "link_mode": "no_match",
             "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
+            "link_window_seconds": None,
             "link_match_count": 0,
-            "link_reason": f"lookup_failed:{exc}",
+            "link_reason": f"tracking_lookup_failed:{exc}",
         }
 
     if not best_trace_id:
         return {
-            "link_mode": "unlinked",
+            "link_mode": "no_match",
             "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
+            "link_window_seconds": None,
             "link_match_count": 0,
-            "link_reason": "no_candidates",
-        }
-
-    if match_count > 1 and not payload.tracking_id:
-        return {
-            "link_mode": "unlinked",
-            "link_target_trace_id": None,
-            "link_window_seconds": window_seconds,
-            "link_match_count": match_count,
-            "link_reason": "ambiguous_candidates",
+            "link_reason": "no_match",
         }
 
     return {
-        "link_mode": "best_match",
+        "link_mode": "tracking_id_exact_match" if match_count == 1 else "tracking_id_recent_match",
         "link_target_trace_id": best_trace_id,
-        "link_window_seconds": window_seconds,
+        "link_window_seconds": None,
         "link_match_count": match_count,
-        "link_reason": "best_match_user_id_window",
+        "link_reason": "tracking_id_match",
     }

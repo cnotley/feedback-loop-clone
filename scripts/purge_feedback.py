@@ -1,8 +1,3 @@
-"""Purge feedback records by retention window or identifiers.
-
-This script is intentionally manual and optional.
-"""
-
 from __future__ import annotations
 
 import argparse
