@@ -1,3 +1,7 @@
+"""Databricks SQL execution helpers."""
+
+# pylint: disable=invalid-name,global-statement,too-many-locals,broad-exception-caught
+
 from __future__ import annotations
 
 import os
@@ -14,6 +18,7 @@ _client: WorkspaceClient | None = None
 
 
 def _get_client() -> WorkspaceClient:
+    """Return a cached Databricks workspace client."""
     global _client
     if _client is None:
         _client = WorkspaceClient()
@@ -21,6 +26,7 @@ def _get_client() -> WorkspaceClient:
 
 
 def _get_int_env(name: str, default: int) -> int:
+    """Read an int environment variable with fallback."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
@@ -31,6 +37,7 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 def _get_float_env(name: str, default: float) -> float:
+    """Read a float environment variable with fallback."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
@@ -41,11 +48,13 @@ def _get_float_env(name: str, default: float) -> float:
 
 
 def _get_str_env(name: str, default: str) -> str:
+    """Read a string environment variable with fallback."""
     raw = os.environ.get(name)
     return raw if raw not in (None, "") else default
 
 
 def sql_literal(value) -> str:
+    """Convert a Python value to a safe SQL literal."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
@@ -57,6 +66,7 @@ def sql_literal(value) -> str:
 
 
 def execute_statement(statement: str, warehouse_id: str) -> List[List]:
+    """Execute a SQL statement with retries and return rows."""
     wait_timeout = _get_str_env("SQL_WAIT_TIMEOUT", DEFAULT_SQL_WAIT_TIMEOUT)
     retries = _get_int_env("SQL_EXEC_RETRIES", DEFAULT_SQL_EXEC_RETRIES)
     backoff_seconds = _get_float_env(

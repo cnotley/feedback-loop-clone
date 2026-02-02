@@ -1,3 +1,5 @@
+"""Structured streaming job to link feedback to traces"""
+
 from __future__ import annotations
 
 import argparse
@@ -6,6 +8,7 @@ from pyspark.sql import SparkSession, functions as F
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the stream linking job"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--feedback-table", required=True)
     parser.add_argument("--trace-table", required=True)
@@ -17,6 +20,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _create_index_table(spark: SparkSession, index_table: str) -> None:
+    """Create the index table if it does not exist"""
     spark.sql(
         f"""
         CREATE TABLE IF NOT EXISTS {index_table} (
@@ -30,6 +34,7 @@ def _create_index_table(spark: SparkSession, index_table: str) -> None:
 
 
 def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) -> None:
+    """Upsert batch trace records into the index table"""
     spark.sql(
         f"""
         MERGE INTO {index_table} AS t
@@ -47,6 +52,7 @@ def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) ->
 def _merge_feedback_by_trace_id(
     spark: SparkSession, feedback_table: str, view_name: str
 ) -> None:
+    """Link feedback rows using trace_id matches"""
     spark.sql(
         f"""
         MERGE INTO {feedback_table} AS f
@@ -64,6 +70,7 @@ def _merge_feedback_by_trace_id(
 def _merge_feedback_by_tracking_id(
     spark: SparkSession, feedback_table: str, index_table: str, view_name: str
 ) -> None:
+    """Link feedback rows using tracking_id matches"""
     spark.sql(
         f"""
         WITH batch_tracking_ids AS (
@@ -112,6 +119,7 @@ def process_batch(
     feedback_table: str,
     index_table: str,
 ) -> None:
+    """Process a micro batch for linking updates"""
     if batch_df.rdd.isEmpty():
         return
     batch_df.createOrReplaceGlobalTempView("batch_traces")
@@ -124,16 +132,17 @@ def process_batch(
 
 
 def main() -> None:
+    """Start the structured streaming job"""
     args = parse_args()
     spark = SparkSession.builder.getOrCreate()
 
     _create_index_table(spark, args.index_table)
 
     trace_stream = (
-      spark.readStream
-      .option("skipChangeCommits", "true")
-      .option("ignoreDeletes", "true")
-      .table(args.trace_table)
+        spark.readStream
+        .option("skipChangeCommits", "true")
+        .option("ignoreDeletes", "true")
+        .table(args.trace_table)
         .select(
             F.col("trace_id").alias("trace_id"),
             F.col("tags")["tracking_id"].alias("tracking_id"),
@@ -145,7 +154,8 @@ def main() -> None:
     )
 
     def process_batch_wrapper(batch_df, _batch_id) -> None:
-      process_batch(spark, batch_df, args.feedback_table, args.index_table)
+        """Delegate batch processing for each micro-batch."""
+        process_batch(spark, batch_df, args.feedback_table, args.index_table)
 
     (
         trace_stream.writeStream

@@ -1,9 +1,13 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+"""Pydantic models for feedback API payloads and responses."""
+
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FeedbackPayload(BaseModel):
+    """Request body for feedback submission."""
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str = Field(..., description="Schema version")
@@ -26,6 +30,7 @@ class FeedbackPayload(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
+    """Response for successful feedback submission."""
     model_config = ConfigDict(extra="forbid")
 
     status: str
@@ -35,6 +40,7 @@ class FeedbackResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
+    """Standard error response payload."""
     model_config = ConfigDict(extra="forbid")
 
     error: str

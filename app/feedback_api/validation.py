@@ -1,3 +1,5 @@
+"""Validation rules for incoming feedback payloads."""
+
 from typing import List
 from .models import FeedbackPayload
 
@@ -11,6 +13,7 @@ MAX_NAME_LENGTH = 255
 
 
 def validate_payload(payload: FeedbackPayload) -> List[str]:
+    """Return a list of human readable validation errors."""
     errors: List[str] = []
 
     if payload.schema_version not in ALLOWED_SCHEMA_VERSIONS:
@@ -58,6 +61,7 @@ def validate_payload(payload: FeedbackPayload) -> List[str]:
 
 
 def _check_length(errors: List[str], field: str, value: str | None, max_len: int) -> None:
+    """Append a length error if a string value exceeds the limit."""
     if value is None:
         return
     if len(value) > max_len:

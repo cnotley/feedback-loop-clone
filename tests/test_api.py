@@ -1,3 +1,8 @@
+"""Tests for the feedback API endpoints and policies."""
+
+# pylint: disable=line-too-long,wrong-import-position,import-outside-toplevel,reimported
+# pylint: disable=redefined-outer-name,unused-argument,unused-import,import-error,no-name-in-module
+
 from datetime import datetime, timezone
 
 import pytest
@@ -10,6 +15,7 @@ from app.feedback_api.storage import DuplicatePayloadError
 
 
 def _payload(**overrides):
+    """Build a valid feedback payload for tests."""
     base = {
         "schema_version": "v1",
         "tracking_id": "track-1",
@@ -35,6 +41,7 @@ def _payload(**overrides):
 
 @pytest.fixture()
 def client(monkeypatch):
+    """Provide a test client with required environment variables set."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     app = create_app()
@@ -42,18 +49,21 @@ def client(monkeypatch):
 
 
 def test_health_endpoint(client):
+    """Health endpoint returns ok."""
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
 
 def test_metrics_endpoint(client):
+    """Metrics endpoint returns counters."""
     resp = client.get("/metrics")
     assert resp.status_code == 200
     assert "counters" in resp.json()
 
 
 def test_submit_feedback_happy_path(client, monkeypatch):
+    """Submitting feedback returns accepted response."""
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
     monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
@@ -66,13 +76,16 @@ def test_submit_feedback_happy_path(client, monkeypatch):
 
 
 def test_submit_feedback_validation_error(client):
+    """Validation errors yield 400 response."""
     resp = client.post("/feedback/submit", json=_payload(tracking_id=" "))
     assert resp.status_code == 400
     assert resp.json()["detail"]["error"] == "validation_failed"
 
 
 def test_submit_feedback_dedup_rejected(client, monkeypatch):
+    """Duplicate payload yields 409 response."""
     def _raise_dup(*args, **kwargs):
+        """Raise a duplicate payload error for testing."""
         raise DuplicatePayloadError("payload_hash already ingested")
 
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
@@ -84,6 +97,7 @@ def test_submit_feedback_dedup_rejected(client, monkeypatch):
 
 
 def test_submit_feedback_rate_limit_ip(client, monkeypatch):
+    """IP rate limit blocks after threshold."""
     monkeypatch.setenv("RATE_LIMIT_PER_IP", "1")
     app = create_app()
     local_client = TestClient(app)
@@ -96,6 +110,7 @@ def test_submit_feedback_rate_limit_ip(client, monkeypatch):
 
 
 def test_submit_feedback_rate_limit_token(client, monkeypatch):
+    """Token rate limit blocks after threshold."""
     monkeypatch.setenv("RATE_LIMIT_PER_TOKEN", "1")
     app = create_app()
     local_client = TestClient(app)
@@ -109,6 +124,7 @@ def test_submit_feedback_rate_limit_token(client, monkeypatch):
 
 
 def test_trace_id_policy_warn_allows(client, monkeypatch):
+    """Warn policy allows invalid trace_id."""
     monkeypatch.setenv("TRACE_ID_POLICY", "warn")
     monkeypatch.setenv("TRACE_ID_REGEX", "^trace-[0-9]+$")
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
@@ -119,6 +135,7 @@ def test_trace_id_policy_warn_allows(client, monkeypatch):
 
 
 def test_trace_id_policy_max_age_strict_rejects(client, monkeypatch):
+    """Max age strict policy rejects old traces."""
     monkeypatch.setenv("TRACE_ID_POLICY", "strict")
     monkeypatch.setenv("TRACE_ID_MAX_AGE_SECONDS", "1")
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
@@ -137,6 +154,7 @@ def test_trace_id_policy_max_age_strict_rejects(client, monkeypatch):
 
 
 def test_policy_check_failed_returns_500(client, monkeypatch):
+    """Policy lookup failure returns 500."""
     monkeypatch.setenv("TRACE_ID_POLICY", "warn")
     monkeypatch.setenv("TRACE_ID_MAX_AGE_SECONDS", "1")
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
@@ -147,6 +165,7 @@ def test_policy_check_failed_returns_500(client, monkeypatch):
 
 
 def test_startup_missing_envs(monkeypatch):
+    """Startup fails when required env vars are missing."""
     monkeypatch.delenv("FEEDBACK_TABLE", raising=False)
     monkeypatch.delenv("DATABRICKS_WAREHOUSE_ID", raising=False)
     with pytest.raises(RuntimeError):
@@ -155,10 +174,12 @@ def test_startup_missing_envs(monkeypatch):
 
 
 def test_app_module_import():
+    """App module imports without error."""
     import app.app
 
 
 def test_trace_id_policy_strict_rejects(client, monkeypatch):
+    """Strict trace policy rejects invalid trace_id."""
     monkeypatch.setenv("TRACE_ID_POLICY", "strict")
     monkeypatch.setenv("TRACE_ID_REGEX", "^trace-[0-9]+$")
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
@@ -170,6 +191,7 @@ def test_trace_id_policy_strict_rejects(client, monkeypatch):
 
 
 def test_tracking_id_policy_strict_rejects(client, monkeypatch):
+    """Strict tracking policy rejects duplicates."""
     monkeypatch.setenv("TRACKING_ID_POLICY", "strict")
     monkeypatch.setenv("TRACKING_ID_UNIQUENESS_SECONDS", "3600")
     monkeypatch.setattr("app.feedback_api.api.tracking_id_recent_exists", lambda *args, **kwargs: True)

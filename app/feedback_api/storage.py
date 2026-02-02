@@ -1,14 +1,16 @@
+"""Storage helpers for persisting feedback to Databricks SQL."""
+
 import hashlib
 import json
 import os
-from datetime import timedelta
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .models import FeedbackPayload
 from .sql_utils import execute_statement, sql_literal
 
 
 def _get_env(name: str) -> str:
+    """Fetch a required environment variable or fail fast."""
     value = os.environ.get(name)
     if not value:
         raise RuntimeError(f"Missing required env var: {name}")
@@ -16,16 +18,18 @@ def _get_env(name: str) -> str:
 
 
 def _payload_hash(payload: FeedbackPayload) -> str:
+    """Compute a stable hash for a feedback payload."""
     raw = json.dumps(payload.model_dump(), sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def payload_hash(payload: FeedbackPayload) -> str:
+    """Public helper for payload hash computation."""
     return _payload_hash(payload)
 
 
 class DuplicatePayloadError(RuntimeError):
-    pass
+    """Raised when a payload hash already exists."""
 
 
 def write_feedback(
@@ -33,6 +37,7 @@ def write_feedback(
     link_info: dict,
     payload_hash_value: str | None = None,
 ) -> str:
+    """Insert feedback into the configured table and return feedback_id."""
     table = _get_env("FEEDBACK_TABLE")
     warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
 
@@ -115,6 +120,7 @@ def write_feedback(
 
 
 def payload_hash_exists(payload_hash_value: str) -> bool:
+    """Check for an existing payload hash in storage."""
     table = _get_env("FEEDBACK_TABLE")
     warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
     statement = f"""
@@ -126,6 +132,12 @@ def payload_hash_exists(payload_hash_value: str) -> bool:
     rows = execute_statement(statement, warehouse_id)
     return bool(rows)
 
+# End of file
+#
+
+
+
+
 
 def tracking_id_recent_exists(
     tracking_id: str,
@@ -134,6 +146,7 @@ def tracking_id_recent_exists(
     pims: str | None = None,
     user_id: str | None = None,
 ) -> bool:
+    """Check if a tracking_id was recently ingested within a window."""
     table = _get_env("FEEDBACK_TABLE")
     warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)

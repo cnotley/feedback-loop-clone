@@ -1,7 +1,10 @@
+"""Tests for rate limiting behavior."""
+
 from app.feedback_api.rate_limit import RateLimitConfig, RateLimiter
 
 
 def test_rate_limit_allows_and_blocks():
+    """Limiter allows first call and blocks subsequent within window."""
     limiter = RateLimiter(
         RateLimitConfig(
             window_seconds=60,

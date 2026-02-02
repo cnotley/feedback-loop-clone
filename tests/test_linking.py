@@ -1,3 +1,7 @@
+"""Tests for trace and tracking linking logic."""
+
+# pylint: disable=line-too-long,unused-argument,import-error,no-name-in-module
+
 from datetime import datetime, timezone
 
 from app.feedback_api.linking import get_trace_timestamp, link_run
@@ -5,6 +9,7 @@ from app.feedback_api.models import FeedbackPayload
 
 
 def _payload(**overrides):
+    """Build a feedback payload for linking tests."""
     base = {
         "schema_version": "v1",
         "tracking_id": "track-1",
@@ -25,10 +30,12 @@ def _payload(**overrides):
 
 
 def test_link_trace_id_verified(monkeypatch):
+    """Trace ID match returns trace_id_match mode."""
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
 
     def fake_execute(statement, warehouse_id):
+        """Return a positive match count for testing."""
         return [[1]]
 
     monkeypatch.setattr("app.feedback_api.linking.execute_statement", fake_execute)
@@ -38,6 +45,7 @@ def test_link_trace_id_verified(monkeypatch):
 
 
 def test_link_trace_id_not_found_falls_back_to_no_match(monkeypatch):
+    """Missing trace ID falls back to no_match."""
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.linking.execute_statement", lambda *args, **kwargs: [])
@@ -47,6 +55,7 @@ def test_link_trace_id_not_found_falls_back_to_no_match(monkeypatch):
 
 
 def test_get_trace_timestamp_datetime(monkeypatch):
+    """Datetime results are returned as-is."""
     now = datetime.now(timezone.utc)
     monkeypatch.setattr("app.feedback_api.linking.execute_statement", lambda *args, **kwargs: [[now]])
     ts = get_trace_timestamp("trace_table", "wh-1", "trace-1")
@@ -54,6 +63,7 @@ def test_get_trace_timestamp_datetime(monkeypatch):
 
 
 def test_trace_id_unverified_when_missing_env(monkeypatch):
+    """Missing env vars prevent trace linking."""
     monkeypatch.delenv("TRACE_TABLE", raising=False)
     monkeypatch.delenv("DATABRICKS_WAREHOUSE_ID", raising=False)
     payload = _payload(trace_id="trace-1")
@@ -62,10 +72,12 @@ def test_trace_id_unverified_when_missing_env(monkeypatch):
 
 
 def test_tracking_id_exact_match(monkeypatch):
+    """Single tracking_id match yields exact mode."""
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
 
     def fake_execute(statement, warehouse_id):
+        """Return results for exact match behavior."""
         if "SELECT COUNT(1)" in statement:
             return [[1]]
         if "ORDER BY request_time DESC" in statement:
@@ -80,10 +92,12 @@ def test_tracking_id_exact_match(monkeypatch):
 
 
 def test_tracking_id_recent_match(monkeypatch):
+    """Multiple matches yield recent match mode."""
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
 
     def fake_execute(statement, warehouse_id):
+        """Return results for recent match behavior."""
         if "SELECT COUNT(1)" in statement:
             return [[2]]
         if "ORDER BY request_time DESC" in statement:
@@ -98,6 +112,7 @@ def test_tracking_id_recent_match(monkeypatch):
 
 
 def test_link_missing_tracking_id(monkeypatch):
+    """Missing tracking_id yields no_match."""
     payload = _payload(tracking_id="", trace_id=None)
     result = link_run(payload)
     assert result["link_mode"] == "no_match"
@@ -105,10 +120,12 @@ def test_link_missing_tracking_id(monkeypatch):
 
 
 def test_tracking_id_lookup_failed_returns_no_match(monkeypatch):
+    """Lookup failures return no_match safely."""
     monkeypatch.setenv("TRACE_TABLE", "trace_table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
 
     def boom(*args, **kwargs):
+        """Raise an error to simulate lookup failure."""
         raise RuntimeError("boom")
 
     monkeypatch.setattr("app.feedback_api.linking.execute_statement", boom)

@@ -1,3 +1,8 @@
+"""FastAPI application and request handlers for feedback ingestion"""
+
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements
+# pylint: disable=too-many-nested-blocks,broad-exception-caught,raise-missing-from,line-too-long
+
 import os
 import time
 from datetime import datetime, timezone
@@ -22,11 +27,13 @@ from .policy import compile_regex, get_int_env_optional, get_policy
 
 
 def create_app() -> FastAPI:
+    """Build and configure the Feedback API application."""
     app = FastAPI(title="Feedback API", version="v1")
     limiter = RateLimiter()
 
     @app.on_event("startup")
     def validate_startup() -> None:
+        """Validate required environment and log startup configuration."""
         required = ["FEEDBACK_TABLE", "DATABRICKS_WAREHOUSE_ID"]
         missing = [name for name in required if not os.environ.get(name)]
         if missing:
@@ -43,6 +50,7 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def log_request(request: Request, call_next):
+        """Attach correlation ID, log request, and record latency."""
         correlation_id = get_or_create_correlation_id(request)
         request.state.correlation_id = correlation_id
         start_time = time.time()
@@ -75,10 +83,12 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
+        """Basic health check endpoint"""
         return {"status": "ok", "service": "feedback-api"}
 
     @app.get("/metrics")
     def metrics_endpoint() -> dict:
+        """Expose in memory counters for basic diagnostics."""
         return {"counters": metrics.counters}
 
     @app.post(
@@ -94,6 +104,7 @@ def create_app() -> FastAPI:
     def submit_feedback(
         payload: FeedbackPayload, request: Request, response: Response
     ) -> FeedbackResponse:
+        """Validate, link, and persist a feedback payload."""
         correlation_id = getattr(request.state, "correlation_id", None) or get_or_create_correlation_id(
             request
         )

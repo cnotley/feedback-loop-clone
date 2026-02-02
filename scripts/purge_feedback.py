@@ -1,3 +1,7 @@
+"""Purge feedback records from the configured table."""
+
+# pylint: disable=broad-exception-caught
+
 from __future__ import annotations
 
 import argparse
@@ -14,6 +18,7 @@ DEFAULT_BACKOFF_SECONDS = 0.5
 
 
 def _get_env(name: str) -> str:
+    """Fetch a required environment variable or fail fast."""
     value = os.environ.get(name)
     if not value:
         raise RuntimeError(f"Missing required env var: {name}")
@@ -21,6 +26,7 @@ def _get_env(name: str) -> str:
 
 
 def _sql_literal(value) -> str:
+    """Convert a Python value to a safe SQL literal."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
@@ -32,6 +38,7 @@ def _sql_literal(value) -> str:
 
 
 def _execute(statement: str, warehouse_id: str) -> None:
+    """Execute a SQL statement with retries."""
     client = WorkspaceClient()
     last_exc: Exception | None = None
     for attempt in range(DEFAULT_RETRIES + 1):
@@ -65,6 +72,7 @@ def _execute(statement: str, warehouse_id: str) -> None:
 
 
 def _build_conditions(args: argparse.Namespace) -> List[str]:
+    """Build WHERE clause conditions from CLI arguments."""
     conditions: List[str] = []
     if args.retention_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=args.retention_days)
@@ -79,6 +87,7 @@ def _build_conditions(args: argparse.Namespace) -> List[str]:
 
 
 def main() -> None:
+    """Parse args and purge feedback rows by condition."""
     parser = argparse.ArgumentParser(description="Purge feedback records.")
     parser.add_argument("--retention-days", type=int, default=None)
     parser.add_argument("--tracking-id", type=str, default=None)

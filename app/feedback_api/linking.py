@@ -1,7 +1,11 @@
+"""Helpers to link feedback with trace data."""
+
+# pylint: disable=broad-exception-caught,too-many-return-statements
+
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from .models import FeedbackPayload
@@ -12,6 +16,7 @@ DEFAULT_LINK_MAX_CANDIDATES = 5
 
 
 def _get_int_env(name: str, default: int) -> int:
+    """Read an int environment variable with fallback."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
@@ -26,6 +31,7 @@ def _fetch_tracking_id_match(
     trace_table: str,
     warehouse_id: str,
 ) -> Tuple[Optional[str], int]:
+    """Return latest trace_id and count for a tracking_id."""
     count_statement = f"""
     SELECT COUNT(1)
     FROM {trace_table}
@@ -50,6 +56,7 @@ def _fetch_tracking_id_match(
 
 
 def _trace_id_exists(trace_table: str, warehouse_id: str, trace_id: str) -> bool:
+    """Check whether a trace_id exists in the trace table."""
     statement = f"""
     SELECT 1
     FROM {trace_table}
@@ -63,6 +70,7 @@ def _trace_id_exists(trace_table: str, warehouse_id: str, trace_id: str) -> bool
 def get_trace_timestamp(
     trace_table: str, warehouse_id: str, trace_id: str
 ) -> Optional[datetime]:
+    """Fetch a trace timestamp and normalize to UTC."""
     statement = f"""
     SELECT request_time
     FROM {trace_table}
@@ -83,6 +91,7 @@ def get_trace_timestamp(
 
 
 def link_run(payload: FeedbackPayload) -> Dict[str, Optional[str]]:
+    """Resolve link information using trace_id or tracking_id."""
     trace_table = os.environ.get("TRACE_TABLE")
     warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID")
 

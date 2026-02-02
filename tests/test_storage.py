@@ -1,3 +1,7 @@
+"""Tests for feedback storage helpers."""
+
+# pylint: disable=line-too-long,unused-argument,import-error,no-name-in-module
+
 from datetime import datetime, timezone
 
 import pytest
@@ -13,6 +17,7 @@ from app.feedback_api.storage import (
 
 
 def _payload(**overrides):
+    """Build a feedback payload for storage tests."""
     base = {
         "schema_version": "v1",
         "tracking_id": "track-1",
@@ -37,11 +42,13 @@ def _payload(**overrides):
 
 
 def test_payload_hash_deterministic():
+    """Hashing is deterministic for the same payload."""
     payload = _payload()
     assert payload_hash(payload) == payload_hash(payload)
 
 
 def test_payload_hash_exists(monkeypatch):
+    """Existing hashes are detected."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.execute_statement", lambda *args, **kwargs: [[1]])
@@ -49,6 +56,7 @@ def test_payload_hash_exists(monkeypatch):
 
 
 def test_tracking_id_recent_exists(monkeypatch):
+    """Recent tracking_id detection returns True when found."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.execute_statement", lambda *args, **kwargs: [[1]])
@@ -56,6 +64,7 @@ def test_tracking_id_recent_exists(monkeypatch):
 
 
 def test_write_feedback_duplicate(monkeypatch):
+    """Duplicate payloads raise DuplicatePayloadError."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: True)
@@ -65,12 +74,14 @@ def test_write_feedback_duplicate(monkeypatch):
 
 
 def test_write_feedback_executes(monkeypatch):
+    """Insert statement is executed and returns feedback_id."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: False)
     called = {}
 
     def fake_execute(statement, warehouse_id):
+        """Capture statement for assertions."""
         called["statement"] = statement
         return []
 
