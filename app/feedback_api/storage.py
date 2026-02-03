@@ -132,13 +132,6 @@ def payload_hash_exists(payload_hash_value: str) -> bool:
     rows = execute_statement(statement, warehouse_id)
     return bool(rows)
 
-# End of file
-#
-
-
-
-
-
 def tracking_id_recent_exists(
     tracking_id: str,
     window_seconds: int,
