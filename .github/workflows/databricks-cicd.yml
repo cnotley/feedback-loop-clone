@@ -15,6 +15,13 @@ jobs:
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
+      DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
+      DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
+      BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
+      BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -25,14 +32,6 @@ jobs:
       - name: Validate bundle
         run: databricks bundle validate -t $BUNDLE_VAR_env
         working-directory: .
-        env:
-          DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-          DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
-          DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET:  ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET}}
-          BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
-          BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
-          BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
   deploy:
     if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push' }}
     needs: validate
@@ -41,6 +40,13 @@ jobs:
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
+      DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
+      DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
+      BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
+      BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -51,23 +57,7 @@ jobs:
       - name: Deploy bundle
         run: databricks bundle deploy -t $BUNDLE_VAR_env
         working-directory: .
-        env:
-          DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-          DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
-          DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET:  ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET}}
-          BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
-          BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
-          BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
 
       - name: Run feedback table DDL
         run: databricks bundle run feedback-table-ddl -t $BUNDLE_VAR_env
         working-directory: .
-        env:
-          DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-          DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
-          DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET:  ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET}}
-          BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
-          BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
-          BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}

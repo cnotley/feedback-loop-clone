@@ -10,6 +10,8 @@ from typing import List
 
 from databricks.sdk import WorkspaceClient
 
+from .env_utils import get_int_env
+
 DEFAULT_SQL_WAIT_TIMEOUT = "10s"
 DEFAULT_SQL_EXEC_RETRIES = 2
 DEFAULT_SQL_BACKOFF_SECONDS = 0.5
@@ -23,17 +25,6 @@ def _get_client() -> WorkspaceClient:
     if _client is None:
         _client = WorkspaceClient()
     return _client
-
-
-def _get_int_env(name: str, default: int) -> int:
-    """Read an int environment variable with fallback."""
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise RuntimeError(f"Invalid int for env var {name}: {raw}") from exc
 
 
 def _get_float_env(name: str, default: float) -> float:
@@ -68,7 +59,7 @@ def sql_literal(value) -> str:
 def execute_statement(statement: str, warehouse_id: str) -> List[List]:
     """Execute a SQL statement with retries and return rows."""
     wait_timeout = _get_str_env("SQL_WAIT_TIMEOUT", DEFAULT_SQL_WAIT_TIMEOUT)
-    retries = _get_int_env("SQL_EXEC_RETRIES", DEFAULT_SQL_EXEC_RETRIES)
+    retries = get_int_env("SQL_EXEC_RETRIES", DEFAULT_SQL_EXEC_RETRIES)
     backoff_seconds = _get_float_env(
         "SQL_EXEC_BACKOFF_SECONDS", DEFAULT_SQL_BACKOFF_SECONDS
     )

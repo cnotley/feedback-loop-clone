@@ -15,17 +15,6 @@ DEFAULT_LINK_WINDOW_SECONDS = 3600
 DEFAULT_LINK_MAX_CANDIDATES = 5
 
 
-def _get_int_env(name: str, default: int) -> int:
-    """Read an int environment variable with fallback."""
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise RuntimeError(f"Invalid int for env var {name}: {raw}") from exc
-
-
 def _fetch_tracking_id_match(
     tracking_id: str,
     trace_table: str,

@@ -2,19 +2,11 @@
 
 import hashlib
 import json
-import os
 from datetime import datetime, timedelta, timezone
 
+from .env_utils import get_env
 from .models import FeedbackPayload
 from .sql_utils import execute_statement, sql_literal
-
-
-def _get_env(name: str) -> str:
-    """Fetch a required environment variable or fail fast."""
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"Missing required env var: {name}")
-    return value
 
 
 def _payload_hash(payload: FeedbackPayload) -> str:
@@ -38,8 +30,8 @@ def write_feedback(
     payload_hash_value: str | None = None,
 ) -> str:
     """Insert feedback into the configured table and return feedback_id."""
-    table = _get_env("FEEDBACK_TABLE")
-    warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
+    table = get_env("FEEDBACK_TABLE")
+    warehouse_id = get_env("DATABRICKS_WAREHOUSE_ID")
 
     digest = payload_hash_value or _payload_hash(payload)
     feedback_id = f"fb_{digest[:16]}"
@@ -121,8 +113,8 @@ def write_feedback(
 
 def payload_hash_exists(payload_hash_value: str) -> bool:
     """Check for an existing payload hash in storage."""
-    table = _get_env("FEEDBACK_TABLE")
-    warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
+    table = get_env("FEEDBACK_TABLE")
+    warehouse_id = get_env("DATABRICKS_WAREHOUSE_ID")
     statement = f"""
     SELECT 1
     FROM {table}
@@ -140,8 +132,8 @@ def tracking_id_recent_exists(
     user_id: str | None = None,
 ) -> bool:
     """Check if a tracking_id was recently ingested within a window."""
-    table = _get_env("FEEDBACK_TABLE")
-    warehouse_id = _get_env("DATABRICKS_WAREHOUSE_ID")
+    table = get_env("FEEDBACK_TABLE")
+    warehouse_id = get_env("DATABRICKS_WAREHOUSE_ID")
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
     conditions = [f"tracking_id = {sql_literal(tracking_id)}"]
     if pims:
