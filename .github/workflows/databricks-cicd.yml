@@ -56,7 +56,7 @@ jobs:
         uses: databricks/setup-cli@main
 
       - name: Bind existing app
-        run: databricks bundle deployment bind feedback_api bf10e5e7-7ab0-4cac-a270-4ef74e0f0c7f --auto-approve -t $BUNDLE_VAR_env
+        run: databricks bundle deployment bind feedback_api feedback-api --auto-approve -t $BUNDLE_VAR_env
         working-directory: .
 
       - name: Deploy bundle
