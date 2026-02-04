@@ -55,6 +55,10 @@ jobs:
       - name: setup databricks
         uses: databricks/setup-cli@main
 
+      - name: Import existing app state
+        run: databricks bundle terraform import databricks_app.feedback_api bf10e5e7-7ab0-4cac-a270-4ef74e0f0c7f
+        working-directory: .
+
       - name: Deploy bundle
         run: databricks bundle deploy -t $BUNDLE_VAR_env
         working-directory: .
