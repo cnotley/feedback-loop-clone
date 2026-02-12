@@ -1,0 +1,85 @@
+bundle:
+  name: feedback-loop
+
+variables:
+  warehouse_id:
+    description: "SQL Warehouse ID for ingestion"
+    default: "b351b2bbacf09043"
+  app_name:
+    description: "Databricks App name"
+    default: "feedback-api"
+  feedback_table:
+    description: "Fully qualified feedback table"
+    default: "llm_sandbox.voice_to_soap.feedback_ingest"
+  trace_table:
+    description: "Fully qualified trace table for run linking"
+    default: "llm_sandbox.inference_tables.trace_logs_2024551179173857"
+  rate_limit_window_seconds:
+    description: "Rate limit window in seconds"
+    default: 60
+  rate_limit_per_user:
+    description: "Max requests per user per window"
+    default: 60
+  rate_limit_per_token:
+    description: "Max requests per token per window"
+    default: 120
+  rate_limit_per_ip:
+    description: "Max requests per IP per window"
+    default: 300
+  log_level:
+    description: "Log level for observability output"
+    default: "INFO"
+  sql_wait_timeout:
+    description: "SQL statement wait timeout"
+    default: "10s"
+  sql_exec_retries:
+    description: "Number of retries for SQL execution"
+    default: 2
+  sql_exec_backoff_seconds:
+    description: "Base backoff in seconds for SQL retries"
+    default: 0.5
+  trace_id_policy:
+    description: "Trace ID policy: off|warn|strict"
+    default: "warn"
+  trace_id_regex:
+    description: "Optional regex for trace_id format"
+    default: ""
+  trace_id_max_age_seconds:
+    description: "Optional max age for trace_id in seconds"
+    default: ""
+  tracking_id_policy:
+    description: "Tracking ID policy: off|warn|strict"
+    default: "warn"
+  tracking_id_regex:
+    description: "Optional regex for tracking_id format"
+    default: ""
+  tracking_id_uniqueness_seconds:
+    description: "Optional uniqueness window for tracking_id in seconds"
+    default: ""
+  trace_index_table:
+    description: "Trace index table for streaming linking"
+    default: "llm_sandbox.inference_tables.trace_index_feedback_linking"
+  link_stream_checkpoint:
+    description: "Checkpoint location for streaming linking job"
+    default: "dbfs:/tmp/feedback-linking-stream-v2"
+  link_stream_trigger_seconds:
+    description: "Streaming trigger interval in seconds"
+    default: 60
+  link_stream_watermark_minutes:
+    description: "Watermark (minutes) for trace stream lateness"
+    default: 15
+
+include:
+  - resources/apps/*.yml
+  - resources/jobs/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+  prod:
+    mode: production
+    workspace:
+    variables:
+      feedback_table: "llm_prod.voice_to_soap.feedback_ingest"
