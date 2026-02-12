@@ -7,7 +7,7 @@ on:
     branches:
       - main
       - develop
-      - feature/initial-mlflow-feedback-loop
+      - 'feature/**'
 
 jobs:
   validate:
@@ -35,7 +35,7 @@ jobs:
         run: databricks bundle validate -t $BUNDLE_VAR_env
         working-directory: .
   deploy:
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feature/initial-mlflow-feedback-loop') && github.event_name == 'push' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')) && github.event_name == 'push' }}
     needs: validate
     name: "deploy asset bundle"
     runs-on: ubuntu-latest
