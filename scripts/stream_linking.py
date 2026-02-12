@@ -135,6 +135,8 @@ def main() -> None:
     """Start the structured streaming job"""
     args = parse_args()
     spark = SparkSession.builder.getOrCreate()
+    
+    spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
 
     _create_index_table(spark, args.index_table)
 
