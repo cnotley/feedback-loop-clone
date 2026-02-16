@@ -62,7 +62,25 @@ jobs:
         working-directory: .
 
       - name: Deploy bundle
-        run: databricks bundle deploy -t $BUNDLE_VAR_env
+        run: databricks bundle deploy -t $BUNDLE_VAR_env --verbose
+        working-directory: .
+
+      - name: Verify streaming job deployment
+        run: |
+          echo "Checking for streaming job..."
+          databricks jobs list --output json > jobs_list.json
+          cat jobs_list.json
+          if grep -q "feedback-linking-streaming" jobs_list.json; then
+            echo "✓ Streaming job 'feedback-linking-streaming' found"
+            JOB_ID=$(cat jobs_list.json | jq -r '.jobs[] | select(.settings.name=="feedback-linking-streaming") | .job_id')
+            echo "Job ID: $JOB_ID"
+            databricks jobs get --job-id $JOB_ID
+          else
+            echo "✗ ERROR: Streaming job 'feedback-linking-streaming' NOT FOUND"
+            echo "Available jobs:"
+            cat jobs_list.json | jq -r '.jobs[] | .settings.name'
+            exit 1
+          fi
         working-directory: .
 
       - name: Run feedback table DDL
