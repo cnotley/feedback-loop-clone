@@ -70,7 +70,7 @@ variables:
     default: 15
   cluster_policy_id:
     description: "Cluster policy ID for job clusters (unrestricted or permissive)"
-    default: ""
+    default: "000427FA002A78F5"
 
 include:
   - resources/apps/*.yml
