@@ -72,13 +72,15 @@ jobs:
           cat jobs_list.json
           if grep -q "feedback-linking-streaming" jobs_list.json; then
             echo "✓ Streaming job 'feedback-linking-streaming' found"
-            JOB_ID=$(cat jobs_list.json | jq -r '.jobs[] | select(.settings.name=="feedback-linking-streaming") | .job_id')
+            JOB_ID=$(cat jobs_list.json | jq -r '.[] | select(.settings.name | contains("feedback-linking-streaming")) | .job_id' | head -1)
+            JOB_NAME=$(cat jobs_list.json | jq -r '.[] | select(.settings.name | contains("feedback-linking-streaming")) | .settings.name' | head -1)
+            echo "Job Name: $JOB_NAME"
             echo "Job ID: $JOB_ID"
             databricks jobs get --job-id $JOB_ID
           else
             echo "✗ ERROR: Streaming job 'feedback-linking-streaming' NOT FOUND"
             echo "Available jobs:"
-            cat jobs_list.json | jq -r '.jobs[] | .settings.name'
+            cat jobs_list.json | jq -r '.[] | .settings.name'
             exit 1
           fi
         working-directory: .
