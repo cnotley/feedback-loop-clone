@@ -37,3 +37,4 @@ resources:
               max_workers: 2
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
+            policy_id: ${var.cluster_policy_id}

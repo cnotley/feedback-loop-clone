@@ -68,6 +68,9 @@ variables:
   link_stream_watermark_minutes:
     description: "Watermark (minutes) for trace stream lateness"
     default: 15
+  cluster_policy_id:
+    description: "Cluster policy ID for job clusters (unrestricted or permissive)"
+    default: ""
 
 include:
   - resources/apps/*.yml

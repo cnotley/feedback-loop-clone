@@ -24,6 +24,7 @@ jobs:
       BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
       BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
       BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
+      BUNDLE_VAR_cluster_policy_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_CLUSTER_POLICY_ID_PROD || secrets.DAB_CLUSTER_POLICY_ID_DEV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,7 @@ jobs:
       BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
       BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
       BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
+      BUNDLE_VAR_cluster_policy_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_CLUSTER_POLICY_ID_PROD || secrets.DAB_CLUSTER_POLICY_ID_DEV }}
 
     steps:
       - uses: actions/checkout@v4
