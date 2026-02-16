@@ -80,12 +80,14 @@ def test_merge_feedback_by_tracking_id_uses_view():
 
 
 def test_process_batch_skips_empty():
-    """Empty batches skip processing."""
+    """Empty batches are processed (isEmpty check removed for resilience)."""
     spark = FakeSpark()
     batch_df = FakeBatchDF(empty=True)
     stream_linking.process_batch(spark, batch_df, "feedback_tbl", "index_tbl")
-    assert batch_df.view_name is None
-    assert not spark.queries
+    # View is always created now, even for empty batches
+    assert batch_df.view_name == "batch_traces"
+    # SQL queries are still executed (Delta/Spark optimizes empty merges)
+    assert len(spark.queries) == 3
 
 
 def test_process_batch_executes_merges():
