@@ -67,16 +67,18 @@ jobs:
 
       - name: Verify streaming job deployment
         run: |
-          echo "Checking for streaming job..."
+          echo "Checking for streaming job in $BUNDLE_VAR_env environment..."
           databricks jobs list --output json > jobs_list.json
-          cat jobs_list.json
           if grep -q "feedback-linking-streaming" jobs_list.json; then
             echo "✓ Streaming job 'feedback-linking-streaming' found"
-            JOB_ID=$(cat jobs_list.json | jq -r '.[] | select(.settings.name | contains("feedback-linking-streaming")) | .job_id' | head -1)
-            JOB_NAME=$(cat jobs_list.json | jq -r '.[] | select(.settings.name | contains("feedback-linking-streaming")) | .settings.name' | head -1)
+            JOB_ID=$(cat jobs_list.json | jq -r ".[] | select(.settings.name | contains(\"feedback-linking-streaming\")) | select(.settings.deployment.metadata_file_path | contains(\"/$BUNDLE_VAR_env/\")) | .job_id" | head -1)
+            JOB_NAME=$(cat jobs_list.json | jq -r ".[] | select(.job_id==$JOB_ID) | .settings.name")
+            echo "Environment: $BUNDLE_VAR_env"
             echo "Job Name: $JOB_NAME"
             echo "Job ID: $JOB_ID"
-            databricks jobs get --job-id $JOB_ID
+            echo ""
+            echo "Full job details:"
+            databricks jobs get $JOB_ID
           else
             echo "✗ ERROR: Streaming job 'feedback-linking-streaming' NOT FOUND"
             echo "Available jobs:"

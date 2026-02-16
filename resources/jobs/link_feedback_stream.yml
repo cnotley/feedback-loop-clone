@@ -25,6 +25,8 @@ resources:
       permissions:
         - level: CAN_VIEW
           user_name: Philip-Mathieu@idexx.com
+        - level: CAN_MANAGE_RUN
+          user_name: chris-notley@idexx.com
       job_clusters:
         - job_cluster_key: feedback-linking-stream-cluster
           new_cluster:
