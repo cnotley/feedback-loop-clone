@@ -57,7 +57,7 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   deploy:
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')) && github.event_name == 'push' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/bugfix/')) && github.event_name == 'push' }}
     needs: [validate, test]
     name: "deploy asset bundle"
     runs-on: ubuntu-latest
