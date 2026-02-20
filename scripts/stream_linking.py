@@ -120,8 +120,6 @@ def process_batch(
     index_table: str,
 ) -> None:
     """Process a micro batch for linking updates"""
-    if batch_df.rdd.isEmpty():
-        return
     batch_df.createOrReplaceGlobalTempView("batch_traces")
     view_name = "global_temp.batch_traces"
     _merge_index_table(spark, index_table, view_name)
@@ -135,6 +133,8 @@ def main() -> None:
     """Start the structured streaming job"""
     args = parse_args()
     spark = SparkSession.builder.getOrCreate()
+    
+    spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
 
     _create_index_table(spark, args.index_table)
 

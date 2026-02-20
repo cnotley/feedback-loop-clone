@@ -20,18 +20,20 @@ resources:
               - ${var.link_stream_trigger_seconds}
               - --watermark-minutes
               - ${var.link_stream_watermark_minutes}
-          max_retries: 0
+          max_retries: 3
           timeout_seconds: 0
       permissions:
         - level: CAN_VIEW
           user_name: Philip-Mathieu@idexx.com
+        - level: CAN_MANAGE_RUN
+          user_name: chris-notley@idexx.com
       job_clusters:
         - job_cluster_key: feedback-linking-stream-cluster
           new_cluster:
             spark_version: 15.4.x-scala2.12
             node_type_id: i3.xlarge
-            autoscale:
-              min_workers: 1
-              max_workers: 2
+            num_workers: 1
             data_security_mode: SINGLE_USER
             runtime_engine: STANDARD
+            aws_attributes:
+              availability: ON_DEMAND

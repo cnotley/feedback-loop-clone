@@ -7,7 +7,7 @@ on:
     branches:
       - main
       - develop
-      - feature/initial-mlflow-feedback-loop
+      - 'feature/**'
 
 jobs:
   validate:
@@ -16,7 +16,7 @@ jobs:
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
-      BUNDLE_BIND_APP: ${{ secrets.DAB_BIND_APP || 'false' }}
+      BUNDLE_BIND_APP: ${{ (secrets.DAB_BIND_APP != '' && (toLower(secrets.DAB_BIND_APP) == 'true' || toLower(secrets.DAB_BIND_APP) == '1' || toLower(secrets.DAB_BIND_APP) == 'yes')) && 'true' || 'false' }}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
       DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
@@ -34,14 +34,36 @@ jobs:
       - name: Validate bundle
         run: databricks bundle validate -t $BUNDLE_VAR_env
         working-directory: .
+  test:
+    name: "Run tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: pytest tests/ -v --tb=short
+
   deploy:
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feature/initial-mlflow-feedback-loop') && github.event_name == 'push' }}
-    needs: validate
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')) && github.event_name == 'push' }}
+    needs: [validate, test]
     name: "deploy asset bundle"
     runs-on: ubuntu-latest
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
+      BUNDLE_BIND_APP: ${{ (secrets.DAB_BIND_APP != '' && (toLower(secrets.DAB_BIND_APP) == 'true' || toLower(secrets.DAB_BIND_APP) == '1' || toLower(secrets.DAB_BIND_APP) == 'yes')) && 'true' || 'false' }}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
       DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
@@ -56,13 +78,39 @@ jobs:
       - name: setup databricks
         uses: databricks/setup-cli@main
 
+      - name: Log bind setting
+        run: echo "BUNDLE_BIND_APP=${BUNDLE_BIND_APP}"
+        working-directory: .
+
       - name: Bind existing app
         if: ${{ env.BUNDLE_BIND_APP == 'true' }}
         run: databricks bundle deployment bind feedback_api feedback-api --auto-approve -t $BUNDLE_VAR_env
         working-directory: .
 
       - name: Deploy bundle
-        run: databricks bundle deploy -t $BUNDLE_VAR_env
+        run: databricks bundle deploy -t $BUNDLE_VAR_env --verbose
+        working-directory: .
+
+      - name: Verify streaming job deployment
+        run: |
+          echo "Checking for streaming job in $BUNDLE_VAR_env environment..."
+          databricks jobs list --output json > jobs_list.json
+          if grep -q "feedback-linking-streaming" jobs_list.json; then
+            echo "✓ Streaming job 'feedback-linking-streaming' found"
+            JOB_ID=$(cat jobs_list.json | jq -r ".[] | select(.settings.name | contains(\"feedback-linking-streaming\")) | select(.settings.deployment.metadata_file_path | contains(\"/$BUNDLE_VAR_env/\")) | .job_id" | head -1)
+            JOB_NAME=$(cat jobs_list.json | jq -r ".[] | select(.job_id==$JOB_ID) | .settings.name")
+            echo "Environment: $BUNDLE_VAR_env"
+            echo "Job Name: $JOB_NAME"
+            echo "Job ID: $JOB_ID"
+            echo ""
+            echo "Full job details:"
+            databricks jobs get $JOB_ID
+          else
+            echo "✗ ERROR: Streaming job 'feedback-linking-streaming' NOT FOUND"
+            echo "Available jobs:"
+            cat jobs_list.json | jq -r '.[] | .settings.name'
+            exit 1
+          fi
         working-directory: .
 
       - name: Run feedback table DDL

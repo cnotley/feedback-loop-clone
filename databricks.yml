@@ -61,7 +61,7 @@ variables:
     default: "llm_sandbox.inference_tables.trace_index_feedback_linking"
   link_stream_checkpoint:
     description: "Checkpoint location for streaming linking job"
-    default: "dbfs:/tmp/feedback-linking-stream-v2"
+    default: "dbfs:/tmp/feedback-linking-stream-v3"
   link_stream_trigger_seconds:
     description: "Streaming trigger interval in seconds"
     default: 60
