@@ -8,6 +8,7 @@ on:
       - main
       - develop
       - 'feature/**'
+      - 'bugfix/**'
 
 jobs:
   validate:
@@ -16,7 +17,6 @@ jobs:
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
-      BUNDLE_BIND_APP: ${{ (secrets.DAB_BIND_APP != '' && (toLower(secrets.DAB_BIND_APP) == 'true' || toLower(secrets.DAB_BIND_APP) == '1' || toLower(secrets.DAB_BIND_APP) == 'yes')) && 'true' || 'false' }}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
       DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
@@ -56,14 +56,14 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   deploy:
-    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')) && github.event_name == 'push' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/bugfix/')) && github.event_name == 'push' }}
     needs: [validate, test]
     name: "deploy asset bundle"
     runs-on: ubuntu-latest
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
-      BUNDLE_BIND_APP: ${{ (secrets.DAB_BIND_APP != '' && (toLower(secrets.DAB_BIND_APP) == 'true' || toLower(secrets.DAB_BIND_APP) == '1' || toLower(secrets.DAB_BIND_APP) == 'yes')) && 'true' || 'false' }}
+      BUNDLE_BIND_APP: ${{ secrets.DAB_BIND_APP == 'true' }}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
       DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
