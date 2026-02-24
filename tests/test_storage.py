@@ -8,7 +8,6 @@ import pytest
 
 from app.feedback_api.models import FeedbackPayload
 from app.feedback_api.storage import (
-    DuplicatePayloadError,
     payload_hash,
     payload_hash_exists,
     tracking_id_recent_exists,
@@ -64,17 +63,18 @@ def test_tracking_id_recent_exists(monkeypatch):
 
 
 def test_write_feedback_duplicate(monkeypatch):
-    """Duplicate payloads raise DuplicatePayloadError."""
+    """Duplicate payloads are idempotent and return was_duplicate=True."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: True)
     payload = _payload()
-    with pytest.raises(DuplicatePayloadError):
-        write_feedback(payload, {"link_mode": "trace_id"})
+    feedback_id, was_duplicate = write_feedback(payload, {"link_mode": "trace_id"})
+    assert feedback_id.startswith("fb_")
+    assert was_duplicate is True
 
 
 def test_write_feedback_executes(monkeypatch):
-    """Insert statement is executed and returns feedback_id."""
+    """Insert statement is executed and returns (feedback_id, was_duplicate=False)."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
     monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: False)
@@ -87,6 +87,7 @@ def test_write_feedback_executes(monkeypatch):
 
     monkeypatch.setattr("app.feedback_api.storage.execute_statement", fake_execute)
     payload = _payload()
-    feedback_id = write_feedback(payload, {"link_mode": "trace_id"})
+    feedback_id, was_duplicate = write_feedback(payload, {"link_mode": "trace_id"})
     assert feedback_id.startswith("fb_")
+    assert was_duplicate is False
     assert "INSERT INTO" in called["statement"]

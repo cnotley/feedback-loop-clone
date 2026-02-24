@@ -11,7 +11,6 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from app.feedback_api.api import create_app
-from app.feedback_api.storage import DuplicatePayloadError
 
 
 def _payload(**overrides):
@@ -65,7 +64,10 @@ def test_metrics_endpoint(client):
 def test_submit_feedback_happy_path(client, monkeypatch):
     """Submitting feedback returns accepted response."""
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload())
     assert resp.status_code == 200
@@ -83,17 +85,15 @@ def test_submit_feedback_validation_error(client):
 
 
 def test_submit_feedback_dedup_rejected(client, monkeypatch):
-    """Duplicate payload yields 409 response."""
-    def _raise_dup(*args, **kwargs):
-        """Raise a duplicate payload error for testing."""
-        raise DuplicatePayloadError("payload_hash already ingested")
-
+    """Duplicate payload is idempotent and returns accepted with same feedback_id."""
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", _raise_dup)
+    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda *args, **kwargs: ("fb_1", True))
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload())
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["error"] == "duplicate_payload"
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "accepted"
+    assert body["feedback_id"] == "fb_1"
 
 
 def test_submit_feedback_rate_limit_ip(client, monkeypatch):
@@ -102,7 +102,10 @@ def test_submit_feedback_rate_limit_ip(client, monkeypatch):
     app = create_app()
     local_client = TestClient(app)
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     assert local_client.post("/feedback/submit", json=_payload()).status_code == 200
     resp = local_client.post("/feedback/submit", json=_payload(tracking_id="track-2"))
@@ -115,7 +118,10 @@ def test_submit_feedback_rate_limit_token(client, monkeypatch):
     app = create_app()
     local_client = TestClient(app)
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     headers = {"Authorization": "Bearer token-1"}
     assert local_client.post("/feedback/submit", json=_payload(), headers=headers).status_code == 200
@@ -128,7 +134,10 @@ def test_trace_id_policy_warn_allows(client, monkeypatch):
     monkeypatch.setenv("TRACE_ID_POLICY", "warn")
     monkeypatch.setenv("TRACE_ID_REGEX", "^trace-[0-9]+$")
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload(trace_id="bad"))
     assert resp.status_code == 200
@@ -146,7 +155,10 @@ def test_trace_id_policy_max_age_strict_rejects(client, monkeypatch):
     old = datetime.now(timezone.utc) - timedelta(seconds=10)
     monkeypatch.setattr("app.feedback_api.api.get_trace_timestamp", lambda *args, **kwargs: old)
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload(trace_id="trace-1"))
     assert resp.status_code == 400
@@ -183,7 +195,10 @@ def test_trace_id_policy_strict_rejects(client, monkeypatch):
     monkeypatch.setenv("TRACE_ID_POLICY", "strict")
     monkeypatch.setenv("TRACE_ID_REGEX", "^trace-[0-9]+$")
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload(trace_id="bad"))
     assert resp.status_code == 400
@@ -196,7 +211,10 @@ def test_tracking_id_policy_strict_rejects(client, monkeypatch):
     monkeypatch.setenv("TRACKING_ID_UNIQUENESS_SECONDS", "3600")
     monkeypatch.setattr("app.feedback_api.api.tracking_id_recent_exists", lambda *args, **kwargs: True)
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
-    monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda payload, link_info, payload_hash_value=None: "fb_1")
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+    )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
     resp = client.post("/feedback/submit", json=_payload())
     assert resp.status_code == 400

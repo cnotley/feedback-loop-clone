@@ -20,25 +20,32 @@ def payload_hash(payload: FeedbackPayload) -> str:
     return _payload_hash(payload)
 
 
-class DuplicatePayloadError(RuntimeError):
-    """Raised when a payload hash already exists."""
+def _feedback_id_for_payload_hash(payload_hash_value: str) -> str:
+    """Derive a deterministic feedback_id from the payload hash."""
+    return f"fb_{payload_hash_value[:16]}"
 
 
 def write_feedback(
     payload: FeedbackPayload,
     link_info: dict,
     payload_hash_value: str | None = None,
-) -> str:
-    """Insert feedback into the configured table and return feedback_id."""
+) -> tuple[str, bool]:
+    """Insert feedback idempotently and return (feedback_id, was_duplicate).
+
+    Contract:
+    - For a given payload, the API returns a deterministic feedback_id.
+    - If the payload was already ingested, we return the same feedback_id and
+      do not create a duplicate row.
+    """
     table = get_env("FEEDBACK_TABLE")
     warehouse_id = get_env("DATABRICKS_WAREHOUSE_ID")
 
     digest = payload_hash_value or _payload_hash(payload)
-    feedback_id = f"fb_{digest[:16]}"
+    feedback_id = _feedback_id_for_payload_hash(digest)
     ingested_at = datetime.now(timezone.utc).isoformat()
 
     if payload_hash_exists(digest):
-        raise DuplicatePayloadError("payload_hash already ingested")
+        return feedback_id, True
 
     statement = f"""
     INSERT INTO {table} (
@@ -108,7 +115,7 @@ def write_feedback(
     """
     execute_statement(statement, warehouse_id)
 
-    return feedback_id
+    return feedback_id, False
 
 
 def payload_hash_exists(payload_hash_value: str) -> bool:
