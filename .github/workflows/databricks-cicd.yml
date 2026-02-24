@@ -28,6 +28,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preflight env var check
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          require() {
+            local name="$1"
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error title=Missing required env var::${name} is not set"
+              missing=1
+            fi
+          }
+          require DATABRICKS_HOST
+          require DATABRICKS_ACCOUNT_ID
+          require DATABRICKS_CLIENT_ID
+          require DATABRICKS_CLIENT_SECRET
+          require BUNDLE_VAR_env
+          require BUNDLE_VAR_feedback_table
+          require BUNDLE_VAR_warehouse_id
+          require BUNDLE_VAR_trace_table
+          exit "$missing"
+        working-directory: .
+
       - name: setup databricks
         uses: databricks/setup-cli@main
 
@@ -74,6 +97,29 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Preflight env var check
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          require() {
+            local name="$1"
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error title=Missing required env var::${name} is not set"
+              missing=1
+            fi
+          }
+          require DATABRICKS_HOST
+          require DATABRICKS_ACCOUNT_ID
+          require DATABRICKS_CLIENT_ID
+          require DATABRICKS_CLIENT_SECRET
+          require BUNDLE_VAR_env
+          require BUNDLE_VAR_feedback_table
+          require BUNDLE_VAR_warehouse_id
+          require BUNDLE_VAR_trace_table
+          exit "$missing"
+        working-directory: .
 
       - name: setup databricks
         uses: databricks/setup-cli@main
