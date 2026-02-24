@@ -1,7 +1,5 @@
 """Validation helpers for Databricks SQL identifiers."""
 
-from __future__ import annotations
-
 import re
 
 _UC_PART = r"[A-Za-z_][A-Za-z0-9_]*"
