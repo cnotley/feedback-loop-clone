@@ -1,10 +1,25 @@
 """Structured streaming job to link feedback to traces"""
 
-from __future__ import annotations
-
 import argparse
+import json
+import logging
+import time
+import traceback
 
 from pyspark.sql import SparkSession, functions as F
+
+
+logger = logging.getLogger("feedback_linking_stream")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
+
+
+def log_event(event: dict) -> None:
+    """Emit a structured JSON log line."""
+    logger.info(json.dumps(event, default=str))
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,15 +133,80 @@ def process_batch(
     batch_df,
     feedback_table: str,
     index_table: str,
-) -> None:
-    """Process a micro batch for linking updates"""
+) -> dict:
+    """Process a micro batch for linking updates.
+
+    Returns:
+        Dict containing timing information for merge operations.
+    """
     batch_df.createOrReplaceGlobalTempView("batch_traces")
     view_name = "global_temp.batch_traces"
+
+    timings_ms: dict[str, int] = {}
+
+    start = time.time()
     _merge_index_table(spark, index_table, view_name)
+    timings_ms["merge_index_ms"] = int((time.time() - start) * 1000)
+
+    start = time.time()
     _merge_feedback_by_trace_id(spark, feedback_table, view_name)
-    _merge_feedback_by_tracking_id(
-        spark, feedback_table, index_table, view_name
+    timings_ms["merge_feedback_trace_id_ms"] = int((time.time() - start) * 1000)
+
+    start = time.time()
+    _merge_feedback_by_tracking_id(spark, feedback_table, index_table, view_name)
+    timings_ms["merge_feedback_tracking_id_ms"] = int((time.time() - start) * 1000)
+
+    return timings_ms
+
+
+def process_microbatch(
+    *,
+    spark: SparkSession,
+    batch_df,
+    batch_id: int,
+    feedback_table: str,
+    index_table: str,
+) -> None:
+    """Wrapper for foreachBatch with logging and fail-fast behavior."""
+    batch_start = time.time()
+    row_count = None
+    try:
+        row_count = int(batch_df.count())
+    except Exception:  # pylint: disable=broad-exception-caught
+        row_count = None
+
+    log_event(
+        {
+            "event": "microbatch_start",
+            "batch_id": batch_id,
+            "input_row_count": row_count,
+        }
     )
+
+    try:
+        timings_ms = process_batch(spark, batch_df, feedback_table, index_table)
+        log_event(
+            {
+                "event": "microbatch_success",
+                "batch_id": batch_id,
+                "input_row_count": row_count,
+                "elapsed_ms": int((time.time() - batch_start) * 1000),
+                **timings_ms,
+            }
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        log_event(
+            {
+                "event": "microbatch_failed",
+                "batch_id": batch_id,
+                "input_row_count": row_count,
+                "elapsed_ms": int((time.time() - batch_start) * 1000),
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            }
+        )
+
+        raise
 
 
 def main() -> None:
@@ -153,9 +233,15 @@ def main() -> None:
         .dropDuplicates(["trace_id"])
     )
 
-    def process_batch_wrapper(batch_df, _batch_id) -> None:
+    def process_batch_wrapper(batch_df, batch_id) -> None:
         """Delegate batch processing for each micro-batch."""
-        process_batch(spark, batch_df, args.feedback_table, args.index_table)
+        process_microbatch(
+            spark=spark,
+            batch_df=batch_df,
+            batch_id=batch_id,
+            feedback_table=args.feedback_table,
+            index_table=args.index_table,
+        )
 
     (
         trace_stream.writeStream

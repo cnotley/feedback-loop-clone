@@ -32,10 +32,15 @@ class FakeBatchDF:  # pylint: disable=too-few-public-methods
         """Stub batch DataFrame used for batch processing tests."""
         self.rdd = FakeRDD(empty)
         self.view_name = None
+        self._count = 0 if empty else 1
 
     def createOrReplaceGlobalTempView(self, name: str):
         """Capture created view name for assertions."""
         self.view_name = name
+
+    def count(self) -> int:
+        """Return a configured row count."""
+        return self._count
 
 
 def test_create_index_table_sql():
@@ -84,9 +89,9 @@ def test_process_batch_skips_empty():
     spark = FakeSpark()
     batch_df = FakeBatchDF(empty=True)
     stream_linking.process_batch(spark, batch_df, "feedback_tbl", "index_tbl")
-    # View is always created now, even for empty batches
+
     assert batch_df.view_name == "batch_traces"
-    # SQL queries are still executed (Delta/Spark optimizes empty merges)
+
     assert len(spark.queries) == 3
 
 
@@ -94,9 +99,12 @@ def test_process_batch_executes_merges():
     """Non-empty batches execute merges."""
     spark = FakeSpark()
     batch_df = FakeBatchDF(empty=False)
-    stream_linking.process_batch(spark, batch_df, "feedback_tbl", "index_tbl")
+    timings = stream_linking.process_batch(spark, batch_df, "feedback_tbl", "index_tbl")
     assert batch_df.view_name == "batch_traces"
     assert len(spark.queries) == 3
+    assert "merge_index_ms" in timings
+    assert "merge_feedback_trace_id_ms" in timings
+    assert "merge_feedback_tracking_id_ms" in timings
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -116,3 +124,63 @@ def test_parse_args_defaults(monkeypatch):
     args = stream_linking.parse_args()
     assert args.trigger_seconds == 60
     assert args.watermark_minutes == 15
+
+
+def test_process_microbatch_logs_and_reraises_on_error(monkeypatch):
+    """Microbatch wrapper logs failure details and re-raises exceptions."""
+    spark = FakeSpark()
+    batch_df = FakeBatchDF(empty=False)
+    events = []
+
+    monkeypatch.setattr(stream_linking, "log_event", lambda event: events.append(event))
+    monkeypatch.setattr(stream_linking, "process_batch", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    try:
+        stream_linking.process_microbatch(
+            spark=spark,
+            batch_df=batch_df,
+            batch_id=7,
+            feedback_table="feedback_tbl",
+            index_table="index_tbl",
+        )
+        assert False, "expected exception"
+    except RuntimeError as exc:
+        assert "boom" in str(exc)
+
+    assert events[0]["event"] == "microbatch_start"
+    assert events[0]["batch_id"] == 7
+    assert events[-1]["event"] == "microbatch_failed"
+    assert events[-1]["batch_id"] == 7
+    assert "traceback" in events[-1]
+
+
+def test_process_microbatch_logs_success(monkeypatch):
+    """Microbatch wrapper logs success and includes timings."""
+    spark = FakeSpark()
+    batch_df = FakeBatchDF(empty=False)
+    events = []
+
+    monkeypatch.setattr(stream_linking, "log_event", lambda event: events.append(event))
+    monkeypatch.setattr(
+        stream_linking,
+        "process_batch",
+        lambda *args, **kwargs: {
+            "merge_index_ms": 1,
+            "merge_feedback_trace_id_ms": 2,
+            "merge_feedback_tracking_id_ms": 3,
+        },
+    )
+
+    stream_linking.process_microbatch(
+        spark=spark,
+        batch_df=batch_df,
+        batch_id=8,
+        feedback_table="feedback_tbl",
+        index_table="index_tbl",
+    )
+
+    assert events[0]["event"] == "microbatch_start"
+    assert events[-1]["event"] == "microbatch_success"
+    assert events[-1]["batch_id"] == 8
+    assert "elapsed_ms" in events[-1]
+    assert events[-1]["merge_index_ms"] == 1
