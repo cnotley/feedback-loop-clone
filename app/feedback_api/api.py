@@ -24,6 +24,7 @@ from .observability import (
     record_latency,
 )
 from .policy import compile_regex, get_int_env_optional, get_policy
+from .identifiers import validate_uc_table_name
 
 
 def _log_rate_limited(scope: str, correlation_id: str, **extra) -> None:
@@ -259,6 +260,10 @@ def create_app() -> FastAPI:
         missing = [name for name in required if not os.environ.get(name)]
         if missing:
             raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+        validate_uc_table_name("FEEDBACK_TABLE", os.environ["FEEDBACK_TABLE"])
+        trace_table = os.environ.get("TRACE_TABLE")
+        if trace_table:
+            validate_uc_table_name("TRACE_TABLE", trace_table)
         compile_regex("TRACE_ID_REGEX")
         compile_regex("TRACKING_ID_REGEX")
         log_event(
