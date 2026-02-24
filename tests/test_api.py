@@ -173,6 +173,16 @@ def test_startup_missing_envs(monkeypatch):
             client.get("/health")
 
 
+def test_startup_rejects_invalid_feedback_table(monkeypatch):
+    """Startup fails fast when FEEDBACK_TABLE is not a valid UC 3-part name."""
+    monkeypatch.setenv("FEEDBACK_TABLE", "schema.table")
+    monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
+    with pytest.raises(RuntimeError) as excinfo:
+        with TestClient(create_app()) as client:
+            client.get("/health")
+    assert "FEEDBACK_TABLE" in str(excinfo.value)
+
+
 def test_app_module_import():
     """App module imports without error."""
     import app.app
