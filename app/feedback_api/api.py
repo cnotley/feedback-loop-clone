@@ -28,7 +28,7 @@ from .identifiers import validate_uc_table_name
 
 
 def _log_rate_limited(scope: str, correlation_id: str, **extra) -> None:
-    """Log a rate-limited event with standard fields."""
+    """Log a rate limited event with standard fields"""
     payload = {
         "event": "rate_limited",
         "scope": scope,
@@ -50,7 +50,7 @@ def _enforce_rate_limit(
     detail_message: str,
     **log_fields,
 ) -> None:
-    """Apply rate limiting and raise HTTPException on violation."""
+    """Apply rate limiting and raise HTTPException on violation"""
     allowed, retry_after = limiter.check(key, limit)
     if allowed:
         return
@@ -67,7 +67,7 @@ def _enforce_rate_limit(
 
 
 def _validate_payload_or_raise(payload: FeedbackPayload, correlation_id: str) -> None:
-    """Validate the payload and raise HTTPException on errors."""
+    """Validate the payload and raise HTTPException on errors"""
     errors = validate_payload(payload)
     if not errors:
         return
@@ -86,7 +86,7 @@ def _validate_payload_or_raise(payload: FeedbackPayload, correlation_id: str) ->
 
 
 def _evaluate_trace_policy(payload: FeedbackPayload) -> tuple[str, list[str], list[str]]:
-    """Evaluate trace policy and return policy, issues, and errors."""
+    """Evaluate trace policy and return policy, issues, and errors"""
     trace_policy = get_policy("TRACE_ID_POLICY", "warn")
     trace_regex = compile_regex("TRACE_ID_REGEX")
     trace_max_age = get_int_env_optional("TRACE_ID_MAX_AGE_SECONDS")
@@ -118,7 +118,7 @@ def _evaluate_trace_policy(payload: FeedbackPayload) -> tuple[str, list[str], li
 def _evaluate_tracking_policy(
     payload: FeedbackPayload,
 ) -> tuple[str, list[str], list[str]]:
-    """Evaluate tracking policy and return policy, issues, and errors."""
+    """Evaluate tracking policy and return policy, issues, and errors"""
     tracking_policy = get_policy("TRACKING_ID_POLICY", "warn")
     tracking_regex = compile_regex("TRACKING_ID_REGEX")
     tracking_window = get_int_env_optional("TRACKING_ID_UNIQUENESS_SECONDS")
@@ -152,7 +152,7 @@ def _handle_policy_results(
     tracking_issues: list[str],
     tracking_errors: list[str],
 ) -> None:
-    """Apply policy decisions and raise HTTPException when required."""
+    """Apply policy decisions and raise HTTPException when required"""
     if trace_errors or tracking_errors:
         metrics.inc("policy_check_failed")
         log_event(
@@ -210,7 +210,7 @@ def _handle_policy_results(
 def _ingest_feedback(
     payload: FeedbackPayload, correlation_id: str
 ) -> tuple[str, dict, str]:
-    """Persist feedback and return (feedback_id, link_info, payload_hash)."""
+    """Persist feedback and return (feedback_id, link_info, payload_hash)"""
     try:
         digest = payload_hash(payload)
         link_info = link_run(payload)
@@ -249,13 +249,13 @@ def _ingest_feedback(
 
 
 def create_app() -> FastAPI:
-    """Build and configure the Feedback API application."""
+    """Build and configure the Feedback API application"""
     app = FastAPI(title="Feedback API", version="v1")
     limiter = RateLimiter()
 
     @app.on_event("startup")
     def validate_startup() -> None:
-        """Validate required environment and log startup configuration."""
+        """Validate required environment and log startup configuration"""
         required = ["FEEDBACK_TABLE", "DATABRICKS_WAREHOUSE_ID"]
         missing = [name for name in required if not os.environ.get(name)]
         if missing:
@@ -276,32 +276,47 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def log_request(request: Request, call_next):
-        """Attach correlation ID, log request, and record latency."""
+        """Attach correlation ID, log request, and record latency"""
         correlation_id = get_or_create_correlation_id(request)
         request.state.correlation_id = correlation_id
         start_time = time.time()
         try:
             response = await call_next(request)
         except Exception as exc:
+            latency_ms = record_latency(start_time)
+            metrics.inc("requests_total")
+            metrics.inc("requests_exception")
+            metrics.inc("requests_errors_5xx")
+            metrics.observe_ms("request_latency_ms", latency_ms)
             log_event(
                 {
                     "event": "request_exception",
                     "method": request.method,
                     "path": request.url.path,
-                    "latency_ms": record_latency(start_time),
+                    "latency_ms": latency_ms,
                     "correlation_id": correlation_id,
                     "error": str(exc),
                 }
             )
             raise
         attach_correlation_id(response, correlation_id)
+        latency_ms = record_latency(start_time)
+        metrics.inc("requests_total")
+        status_code = response.status_code
+        status_class = status_code // 100
+        metrics.inc(f"requests_status_{status_class}xx")
+        if 400 <= status_code < 500:
+            metrics.inc("requests_errors_4xx")
+        elif status_code >= 500:
+            metrics.inc("requests_errors_5xx")
+        metrics.observe_ms("request_latency_ms", latency_ms)
         log_event(
             {
                 "event": "request",
                 "method": request.method,
                 "path": request.url.path,
-                "status_code": response.status_code,
-                "latency_ms": record_latency(start_time),
+                "status_code": status_code,
+                "latency_ms": latency_ms,
                 "correlation_id": correlation_id,
             }
         )
@@ -314,8 +329,8 @@ def create_app() -> FastAPI:
 
     @app.get("/metrics")
     def metrics_endpoint() -> dict:
-        """Expose in memory counters for basic diagnostics."""
-        return {"counters": metrics.counters}
+        """Expose JSON friendly metrics for diagnostics and monitoring"""
+        return metrics.snapshot()
 
     @app.post(
         "/feedback/submit",
@@ -330,7 +345,7 @@ def create_app() -> FastAPI:
     def submit_feedback(
         payload: FeedbackPayload, request: Request, response: Response
     ) -> FeedbackResponse:
-        """Validate, link, and persist a feedback payload."""
+        """Validate, link, and persist a feedback payload"""
         correlation_id = getattr(request.state, "correlation_id", None) or get_or_create_correlation_id(
             request
         )
@@ -349,6 +364,15 @@ def create_app() -> FastAPI:
         )
 
         auth_header = request.headers.get("authorization") or ""
+        if auth_header and not auth_header.lower().startswith("bearer "):
+            metrics.inc("auth_failures")
+            log_event(
+                {
+                    "event": "auth_failure",
+                    "reason": "invalid_auth_scheme",
+                    "correlation_id": correlation_id,
+                }
+            )
         if auth_header.lower().startswith("bearer "):
             token = auth_header[7:].strip()
             if token:
@@ -362,6 +386,15 @@ def create_app() -> FastAPI:
                     scope="token",
                     metric_name="rate_limited_token",
                     detail_message="token limit exceeded",
+                )
+            else:
+                metrics.inc("auth_failures")
+                log_event(
+                    {
+                        "event": "auth_failure",
+                        "reason": "empty_bearer_token",
+                        "correlation_id": correlation_id,
+                    }
                 )
 
         _validate_payload_or_raise(payload, correlation_id)
