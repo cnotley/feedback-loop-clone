@@ -60,6 +60,9 @@ jobs:
     needs: [validate, test]
     name: "deploy asset bundle"
     runs-on: ubuntu-latest
+    concurrency:
+      group: dab-deploy-${{ github.repository }}
+      cancel-in-progress: true
 
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
