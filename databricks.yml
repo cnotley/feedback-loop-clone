@@ -71,6 +71,12 @@ variables:
   link_reconcile_max_rows:
     description: "Maximum unmatched rows reconciled per micro-batch"
     default: 100000
+  link_reconcile_sweep_lookback_hours:
+    description: "Lookback window in hours for standalone reconcile sweep job"
+    default: 720
+  link_reconcile_sweep_max_rows:
+    description: "Maximum rows reconciled per standalone sweep run"
+    default: 1000000
 
 include:
   - resources/apps/*.yml
