@@ -68,6 +68,9 @@ variables:
   link_stream_watermark_minutes:
     description: "Watermark (minutes) for trace stream lateness"
     default: 15
+  feedback_vacuum_retain_hours:
+    description: "Retention (hours) for VACUUM maintenance on feedback table"
+    default: 168
 
 include:
   - resources/apps/*.yml

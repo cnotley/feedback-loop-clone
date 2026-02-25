@@ -29,4 +29,5 @@ CREATE TABLE IF NOT EXISTS llm_sandbox.voice_to_soap.feedback_ingest (
   is_valid BOOLEAN,
   validation_errors ARRAY<STRING>
 )
-USING DELTA;
+USING DELTA
+CLUSTER BY (ingested_at, tracking_id, trace_id, payload_hash);

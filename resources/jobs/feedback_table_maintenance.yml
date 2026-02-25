@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    feedback-table-maintenance:
+      name: feedback-table-maintenance
+      tasks:
+        - task_key: optimize-and-vacuum-feedback-table
+          job_cluster_key: feedback-table-maintenance-cluster
+          spark_python_task:
+            python_file: ../../scripts/maintain_feedback_table.py
+            parameters:
+              - --table
+              - ${var.feedback_table}
+              - --warehouse-id
+              - ${var.warehouse_id}
+              - --vacuum-retain-hours
+              - ${var.feedback_vacuum_retain_hours}
+          max_retries: 1
+          timeout_seconds: 0
+      job_clusters:
+        - job_cluster_key: feedback-table-maintenance-cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: i3.xlarge
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            aws_attributes:
+              availability: ON_DEMAND
