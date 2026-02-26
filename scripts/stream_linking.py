@@ -1,4 +1,4 @@
-"""Structured streaming job to link feedback to traces"""
+from __future__ import annotations
 
 import argparse
 
@@ -6,7 +6,6 @@ from pyspark.sql import SparkSession, functions as F
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for the stream linking job"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--feedback-table", required=True)
     parser.add_argument("--trace-table", required=True)
@@ -18,8 +17,34 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _tracking_id_source_names(columns: list[str]) -> list[str]:
+    available = set(columns)
+    source_names: list[str] = []
+    if "tracking_id" in available:
+        source_names.append("tracking_id")
+    if "tags" in available:
+        source_names.append("tags")
+    if "trace_metadata" in available:
+        source_names.append("trace_metadata")
+    return source_names
+
+
+def _build_tracking_id_expr(columns: list[str]):
+    source_names = _tracking_id_source_names(columns)
+    candidates = []
+    for source_name in source_names:
+        if source_name == "tracking_id":
+            candidates.append(F.col("tracking_id"))
+        else:
+            candidates.append(F.col(source_name)["tracking_id"])
+    if not candidates:
+        return F.lit(None).cast("string")
+    if len(candidates) == 1:
+        return candidates[0]
+    return F.coalesce(*candidates)
+
+
 def _create_index_table(spark: SparkSession, index_table: str) -> None:
-    """Create the index table if it does not exist"""
     spark.sql(
         f"""
         CREATE TABLE IF NOT EXISTS {index_table} (
@@ -33,7 +58,6 @@ def _create_index_table(spark: SparkSession, index_table: str) -> None:
 
 
 def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) -> None:
-    """Upsert batch trace records into the index table"""
     spark.sql(
         f"""
         MERGE INTO {index_table} AS t
@@ -51,7 +75,6 @@ def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) ->
 def _merge_feedback_by_trace_id(
     spark: SparkSession, feedback_table: str, view_name: str
 ) -> None:
-    """Link feedback rows using trace_id matches"""
     spark.sql(
         f"""
         MERGE INTO {feedback_table} AS f
@@ -69,7 +92,6 @@ def _merge_feedback_by_trace_id(
 def _merge_feedback_by_tracking_id(
     spark: SparkSession, feedback_table: str, index_table: str, view_name: str
 ) -> None:
-    """Link feedback rows using tracking_id matches"""
     spark.sql(
         f"""
         WITH batch_tracking_ids AS (
@@ -119,7 +141,6 @@ def _reconcile_feedback_by_trace_id(
     lookback_hours: int,
     max_rows: int,
 ) -> None:
-    """Index wide bounded reconciliation for no_match rows by trace_id"""
     spark.sql(
         f"""
         WITH unmatched AS (
@@ -155,7 +176,6 @@ def _reconcile_feedback_by_tracking_id(
     lookback_hours: int,
     max_rows: int,
 ) -> None:
-    """Index wide bounded reconciliation for no_match rows by tracking_id"""
     spark.sql(
         f"""
         WITH unmatched AS (
@@ -211,7 +231,6 @@ def process_batch(
     lookback_hours: int,
     max_rows: int,
 ) -> None:
-    """Process a micro batch for linking updates"""
     batch_df.createOrReplaceGlobalTempView("batch_traces")
     view_name = "global_temp.batch_traces"
     _merge_index_table(spark, index_table, view_name)
@@ -228,7 +247,6 @@ def process_batch(
 
 
 def main() -> None:
-    """Start the structured streaming job"""
     args = parse_args()
     spark = SparkSession.builder.getOrCreate()
     
@@ -236,23 +254,24 @@ def main() -> None:
 
     _create_index_table(spark, args.index_table)
 
-    trace_stream = (
+    trace_source = (
         spark.readStream
         .option("ignoreChanges", "true")
         .option("ignoreDeletes", "true")
         .table(args.trace_table)
+    )
+
+    trace_stream = (
+        trace_source
         .select(
             F.col("trace_id").alias("trace_id"),
-            F.coalesce(F.col("tracking_id"), F.col("tags")["tracking_id"]).alias(
-                "tracking_id"
-            ),
+            _build_tracking_id_expr(trace_source.columns).alias("tracking_id"),
             F.col("request_time").alias("request_time"),
         )
         .where(F.col("trace_id").isNotNull())
     )
 
     def process_batch_wrapper(batch_df, _batch_id) -> None:
-        """Delegate batch processing for each micro batch"""
         process_batch(
             spark,
             batch_df,

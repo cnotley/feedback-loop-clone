@@ -1,10 +1,7 @@
-"""Tests for the stream linking job SQL and batching"""
-# pylint: disable=invalid-name,protected-access,duplicate-code
-
 from scripts import stream_linking
 
 
-class FakeSpark:  # pylint: disable=too-few-public-methods
+class FakeSpark:
     def __init__(self):
         self.queries = []
 
@@ -12,7 +9,7 @@ class FakeSpark:  # pylint: disable=too-few-public-methods
         self.queries.append(query)
 
 
-class FakeRDD:  # pylint: disable=too-few-public-methods
+class FakeRDD:
     def __init__(self, empty: bool):
         self._empty = empty
 
@@ -20,7 +17,7 @@ class FakeRDD:  # pylint: disable=too-few-public-methods
         return self._empty
 
 
-class FakeBatchDF:  # pylint: disable=too-few-public-methods
+class FakeBatchDF:
     def __init__(self, empty: bool = False):
         self.rdd = FakeRDD(empty)
         self.view_name = None
@@ -29,9 +26,10 @@ class FakeBatchDF:  # pylint: disable=too-few-public-methods
         self.view_name = name
 
 
-class RecordingReadStream:  # pylint: disable=too-few-public-methods
-    def __init__(self):
+class RecordingReadStream:
+    def __init__(self, columns=None):
         self.operations = []
+        self.columns = columns or ["trace_id", "tracking_id", "tags", "trace_metadata", "request_time"]
 
     def option(self, key, value):
         self.operations.append(("option", key, value))
@@ -62,7 +60,7 @@ class RecordingReadStream:  # pylint: disable=too-few-public-methods
         return RecordingWriteStream(self.operations)
 
 
-class RecordingWriteStream:  # pylint: disable=too-few-public-methods
+class RecordingWriteStream:
     def __init__(self, operations):
         self.operations = operations
 
@@ -87,9 +85,9 @@ class RecordingWriteStream:  # pylint: disable=too-few-public-methods
         return None
 
 
-class RecordingSpark:  # pylint: disable=too-few-public-methods
-    def __init__(self):
-        self.readStream = RecordingReadStream()
+class RecordingSpark:
+    def __init__(self, columns=None):
+        self.readStream = RecordingReadStream(columns=columns)
         self.conf = self
         self.queries = []
 
@@ -180,7 +178,6 @@ def test_process_batch_skips_empty():
         lookback_hours=24,
         max_rows=1000,
     )
-
     assert batch_df.view_name == "batch_traces"
     assert len(spark.queries) == 5
 
@@ -234,7 +231,7 @@ def test_main_does_not_apply_watermark_or_dropduplicates(monkeypatch):
     monkeypatch.setattr("sys.argv", argv)
     fake_spark = RecordingSpark()
 
-    class _Builder:  # pylint: disable=too-few-public-methods
+    class _Builder:
         def getOrCreate(self):
             return fake_spark
 
@@ -245,3 +242,143 @@ def test_main_does_not_apply_watermark_or_dropduplicates(monkeypatch):
     op_names = [entry[0] for entry in ops]
     assert "withWatermark" not in op_names
     assert "dropDuplicates" not in op_names
+
+
+def test_tracking_id_source_names_all_supported_paths():
+    result = stream_linking._tracking_id_source_names(
+        ["trace_id", "tracking_id", "tags", "trace_metadata"]
+    )
+    assert result == ["tracking_id", "tags", "trace_metadata"]
+
+
+def test_tracking_id_source_names_without_top_level():
+    result = stream_linking._tracking_id_source_names(["trace_id", "tags", "request_time"])
+    assert result == ["tags"]
+
+
+def test_tracking_id_source_names_trace_metadata_only():
+    result = stream_linking._tracking_id_source_names(
+        ["trace_id", "trace_metadata", "request_time"]
+    )
+    assert result == ["trace_metadata"]
+
+
+def test_tracking_id_source_names_no_supported_columns():
+    result = stream_linking._tracking_id_source_names(["trace_id", "request_time"])
+    assert result == []
+
+
+class _FakeExpr:
+    def __init__(self, value):
+        self.value = value
+
+    def __getitem__(self, key):
+        return _FakeExpr(f"{self.value}[{key}]")
+
+    def cast(self, dtype):
+        return _FakeExpr(f"cast({self.value} as {dtype})")
+
+    def alias(self, name):
+        return _FakeExpr(f"{self.value} as {name}")
+
+    def isNotNull(self):
+        return _FakeExpr(f"{self.value} is not null")
+
+
+class _FakeFunctions:
+    def __init__(self):
+        self.col_calls = []
+        self.coalesce_calls = []
+        self.lit_calls = []
+
+    def col(self, name):
+        self.col_calls.append(name)
+        return _FakeExpr(f"col({name})")
+
+    def coalesce(self, *args):
+        values = [arg.value for arg in args]
+        self.coalesce_calls.append(values)
+        return _FakeExpr(f"coalesce({', '.join(values)})")
+
+    def lit(self, value):
+        self.lit_calls.append(value)
+        return _FakeExpr(f"lit({value})")
+
+
+def test_build_tracking_id_expr_prefers_single_top_level(monkeypatch):
+    fake_f = _FakeFunctions()
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    expr = stream_linking._build_tracking_id_expr(["trace_id", "tracking_id", "request_time"])
+    assert expr.value == "col(tracking_id)"
+    assert fake_f.coalesce_calls == []
+    assert fake_f.col_calls == ["tracking_id"]
+
+
+def test_build_tracking_id_expr_uses_tags_when_top_level_missing(monkeypatch):
+    fake_f = _FakeFunctions()
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    expr = stream_linking._build_tracking_id_expr(["trace_id", "tags", "request_time"])
+    assert expr.value == "col(tags)[tracking_id]"
+    assert fake_f.col_calls == ["tags"]
+    assert "tracking_id" not in fake_f.col_calls
+
+
+def test_build_tracking_id_expr_uses_trace_metadata_when_tags_missing(monkeypatch):
+    fake_f = _FakeFunctions()
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    expr = stream_linking._build_tracking_id_expr(
+        ["trace_id", "trace_metadata", "request_time"]
+    )
+    assert expr.value == "col(trace_metadata)[tracking_id]"
+    assert fake_f.col_calls == ["trace_metadata"]
+
+
+def test_build_tracking_id_expr_coalesces_multiple_sources_in_order(monkeypatch):
+    fake_f = _FakeFunctions()
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    expr = stream_linking._build_tracking_id_expr(
+        ["trace_id", "trace_metadata", "tracking_id", "tags"]
+    )
+    assert expr.value == (
+        "coalesce(col(tracking_id), col(tags)[tracking_id], col(trace_metadata)[tracking_id])"
+    )
+    assert fake_f.coalesce_calls == [
+        ["col(tracking_id)", "col(tags)[tracking_id]", "col(trace_metadata)[tracking_id]"]
+    ]
+
+
+def test_build_tracking_id_expr_returns_typed_null_when_missing(monkeypatch):
+    fake_f = _FakeFunctions()
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    expr = stream_linking._build_tracking_id_expr(["trace_id", "request_time"])
+    assert expr.value == "cast(lit(None) as string)"
+    assert fake_f.col_calls == []
+    assert fake_f.lit_calls == [None]
+
+
+def test_main_uses_schema_adaptive_extraction_when_tracking_id_missing(monkeypatch):
+    argv = [
+        "prog",
+        "--feedback-table",
+        "f",
+        "--trace-table",
+        "t",
+        "--index-table",
+        "i",
+        "--checkpoint",
+        "c",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    fake_spark = RecordingSpark(columns=["trace_id", "tags", "request_time"])
+    fake_f = _FakeFunctions()
+
+    class _Builder:
+        def getOrCreate(self):
+            return fake_spark
+
+    monkeypatch.setattr(stream_linking.SparkSession, "builder", _Builder())
+    monkeypatch.setattr(stream_linking, "F", fake_f)
+    stream_linking.main()
+
+    assert "tracking_id" not in fake_f.col_calls
+    assert "tags" in fake_f.col_calls
