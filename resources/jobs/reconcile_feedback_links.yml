@@ -18,6 +18,9 @@ resources:
               - ${var.link_reconcile_sweep_max_rows}
           max_retries: 1
           timeout_seconds: 0
+      permissions:
+        - level: CAN_MANAGE_RUN
+          user_name: chris-notley@idexx.com
       job_clusters:
         - job_cluster_key: feedback-link-reconcile-cluster
           new_cluster:
