@@ -3,10 +3,16 @@ import json
 
 from pyspark.sql import SparkSession
 
-from scripts.stream_linking import (
-    _reconcile_feedback_by_trace_id,
-    _reconcile_feedback_by_tracking_id,
-)
+try:
+    from scripts.stream_linking import (
+        _reconcile_feedback_by_trace_id,
+        _reconcile_feedback_by_tracking_id,
+    )
+except ModuleNotFoundError:
+    from stream_linking import (
+        _reconcile_feedback_by_trace_id,
+        _reconcile_feedback_by_tracking_id,
+    )
 
 
 def parse_args() -> argparse.Namespace:
