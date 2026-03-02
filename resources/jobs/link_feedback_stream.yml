@@ -30,10 +30,10 @@ resources:
       job_clusters:
         - job_cluster_key: feedback-linking-stream-cluster
           new_cluster:
-            spark_version: 15.4.x-scala2.12
-            node_type_id: i3.xlarge
-            num_workers: 1
-            data_security_mode: SINGLE_USER
-            runtime_engine: STANDARD
+            spark_version: ${var.link_spark_version}
+            node_type_id: ${var.link_node_type_id}
+            num_workers: ${var.link_num_workers}
+            data_security_mode: ${var.link_data_security_mode}
+            runtime_engine: ${var.link_runtime_engine}
             aws_attributes:
-              availability: ON_DEMAND
+              availability: ${var.link_aws_availability}
