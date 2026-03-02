@@ -65,9 +65,18 @@ variables:
   link_stream_trigger_seconds:
     description: "Streaming trigger interval in seconds"
     default: 60
-  link_stream_watermark_minutes:
-    description: "Watermark (minutes) for trace stream lateness"
-    default: 15
+  link_reconcile_lookback_hours:
+    description: "Lookback window in hours for bounded no_match reconciliation"
+    default: 168
+  link_reconcile_max_rows:
+    description: "Maximum unmatched rows reconciled per micro-batch"
+    default: 100000
+  link_reconcile_sweep_lookback_hours:
+    description: "Lookback window in hours for standalone reconcile sweep job"
+    default: 720
+  link_reconcile_sweep_max_rows:
+    description: "Maximum rows reconciled per standalone sweep run"
+    default: 1000000
 
 include:
   - resources/apps/*.yml
@@ -82,4 +91,4 @@ targets:
     mode: production
     workspace:
     variables:
-      feedback_table: "llm_prod.voice_to_soap.feedback_ingest"
+      feedback_table: "llm_sandbox.voice_to_soap.feedback_ingest"

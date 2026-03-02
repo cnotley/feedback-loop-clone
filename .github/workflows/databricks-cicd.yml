@@ -162,6 +162,28 @@ jobs:
           fi
         working-directory: .
 
+      - name: Verify reconcile job deployment
+        run: |
+          echo "Checking for reconcile job in $BUNDLE_VAR_env environment..."
+          databricks jobs list --output json > jobs_list_reconcile.json
+          if grep -q "feedback-link-reconcile-sweep" jobs_list_reconcile.json; then
+            echo "✓ Reconcile job 'feedback-link-reconcile-sweep' found"
+            JOB_ID=$(cat jobs_list_reconcile.json | jq -r ".[] | select(.settings.name | contains(\"feedback-link-reconcile-sweep\")) | select(.settings.deployment.metadata_file_path | contains(\"/$BUNDLE_VAR_env/\")) | .job_id" | head -1)
+            JOB_NAME=$(cat jobs_list_reconcile.json | jq -r ".[] | select(.job_id==$JOB_ID) | .settings.name")
+            echo "Environment: $BUNDLE_VAR_env"
+            echo "Job Name: $JOB_NAME"
+            echo "Job ID: $JOB_ID"
+            echo ""
+            echo "Full job details:"
+            databricks jobs get $JOB_ID
+          else
+            echo "✗ ERROR: Reconcile job 'feedback-link-reconcile-sweep' NOT FOUND"
+            echo "Available jobs:"
+            cat jobs_list_reconcile.json | jq -r '.[] | .settings.name'
+            exit 1
+          fi
+        working-directory: .
+
       - name: Run feedback table DDL
         run: databricks bundle run feedback-table-ddl -t $BUNDLE_VAR_env
         working-directory: .

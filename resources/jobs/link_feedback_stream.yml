@@ -18,8 +18,10 @@ resources:
               - ${var.link_stream_checkpoint}
               - --trigger-seconds
               - ${var.link_stream_trigger_seconds}
-              - --watermark-minutes
-              - ${var.link_stream_watermark_minutes}
+              - --reconcile-lookback-hours
+              - ${var.link_reconcile_lookback_hours}
+              - --reconcile-max-rows
+              - ${var.link_reconcile_max_rows}
           max_retries: 3
           timeout_seconds: 0
       permissions:

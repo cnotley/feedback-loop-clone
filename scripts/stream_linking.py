@@ -1,26 +1,58 @@
-"""Structured streaming job to link feedback to traces"""
-
 from __future__ import annotations
 
 import argparse
 
 from pyspark.sql import SparkSession, functions as F
 
+STREAMING_QUERY_VERSION = "no_stateful_ops_v1"
+
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for the stream linking job"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--feedback-table", required=True)
     parser.add_argument("--trace-table", required=True)
     parser.add_argument("--index-table", required=True)
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--query-version", default=STREAMING_QUERY_VERSION)
     parser.add_argument("--trigger-seconds", type=int, default=60)
-    parser.add_argument("--watermark-minutes", type=int, default=15)
+    parser.add_argument("--reconcile-lookback-hours", type=int, default=168)
+    parser.add_argument("--reconcile-max-rows", type=int, default=100000)
     return parser.parse_args()
 
 
+def _checkpoint_location(base_checkpoint: str, query_version: str) -> str:
+    base = base_checkpoint.rstrip("/")
+    return f"{base}/stream_query_{query_version}"
+
+
+def _tracking_id_source_names(columns: list[str]) -> list[str]:
+    available = set(columns)
+    source_names: list[str] = []
+    if "tracking_id" in available:
+        source_names.append("tracking_id")
+    if "tags" in available:
+        source_names.append("tags")
+    if "trace_metadata" in available:
+        source_names.append("trace_metadata")
+    return source_names
+
+
+def _build_tracking_id_expr(columns: list[str]):
+    source_names = _tracking_id_source_names(columns)
+    candidates = []
+    for source_name in source_names:
+        if source_name == "tracking_id":
+            candidates.append(F.col("tracking_id"))
+        else:
+            candidates.append(F.col(source_name)["tracking_id"])
+    if not candidates:
+        return F.lit(None).cast("string")
+    if len(candidates) == 1:
+        return candidates[0]
+    return F.coalesce(*candidates)
+
+
 def _create_index_table(spark: SparkSession, index_table: str) -> None:
-    """Create the index table if it does not exist"""
     spark.sql(
         f"""
         CREATE TABLE IF NOT EXISTS {index_table} (
@@ -34,7 +66,6 @@ def _create_index_table(spark: SparkSession, index_table: str) -> None:
 
 
 def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) -> None:
-    """Upsert batch trace records into the index table"""
     spark.sql(
         f"""
         MERGE INTO {index_table} AS t
@@ -52,7 +83,6 @@ def _merge_index_table(spark: SparkSession, index_table: str, view_name: str) ->
 def _merge_feedback_by_trace_id(
     spark: SparkSession, feedback_table: str, view_name: str
 ) -> None:
-    """Link feedback rows using trace_id matches"""
     spark.sql(
         f"""
         MERGE INTO {feedback_table} AS f
@@ -70,7 +100,6 @@ def _merge_feedback_by_trace_id(
 def _merge_feedback_by_tracking_id(
     spark: SparkSession, feedback_table: str, index_table: str, view_name: str
 ) -> None:
-    """Link feedback rows using tracking_id matches"""
     spark.sql(
         f"""
         WITH batch_tracking_ids AS (
@@ -113,13 +142,103 @@ def _merge_feedback_by_tracking_id(
     )
 
 
+def _reconcile_feedback_by_trace_id(
+    spark: SparkSession,
+    feedback_table: str,
+    index_table: str,
+    lookback_hours: int,
+    max_rows: int,
+) -> None:
+    spark.sql(
+        f"""
+        WITH unmatched AS (
+          SELECT feedback_id, trace_id
+          FROM {feedback_table}
+          WHERE link_mode = 'no_match'
+            AND trace_id IS NOT NULL
+            AND ingested_at >= current_timestamp() - INTERVAL {lookback_hours} HOURS
+          ORDER BY ingested_at ASC
+          LIMIT {max_rows}
+        )
+        MERGE INTO {feedback_table} AS f
+        USING (
+          SELECT u.feedback_id AS feedback_id, i.trace_id AS link_target_trace_id
+          FROM unmatched AS u
+          INNER JOIN {index_table} AS i
+            ON u.trace_id = i.trace_id
+        ) AS s
+        ON f.feedback_id = s.feedback_id
+        WHEN MATCHED THEN UPDATE SET
+          f.link_mode = 'trace_id_match',
+          f.link_target_trace_id = s.link_target_trace_id,
+          f.link_match_count = 1,
+          f.link_reason = 'trace_id_verified_reconciled'
+        """
+    )
+
+
+def _reconcile_feedback_by_tracking_id(
+    spark: SparkSession,
+    feedback_table: str,
+    index_table: str,
+    lookback_hours: int,
+    max_rows: int,
+) -> None:
+    spark.sql(
+        f"""
+        WITH unmatched AS (
+          SELECT feedback_id, tracking_id
+          FROM {feedback_table}
+          WHERE link_mode = 'no_match'
+            AND tracking_id IS NOT NULL
+            AND ingested_at >= current_timestamp() - INTERVAL {lookback_hours} HOURS
+          ORDER BY ingested_at ASC
+          LIMIT {max_rows}
+        ),
+        candidates AS (
+          SELECT
+            i.tracking_id AS tracking_id,
+            COUNT(1) AS link_match_count,
+            max_by(i.trace_id, i.request_time) AS link_target_trace_id
+          FROM {index_table} AS i
+          INNER JOIN (
+            SELECT DISTINCT tracking_id FROM unmatched
+          ) AS u
+            ON i.tracking_id = u.tracking_id
+          GROUP BY i.tracking_id
+        )
+        MERGE INTO {feedback_table} AS f
+        USING (
+          SELECT
+            u.feedback_id AS feedback_id,
+            c.link_target_trace_id AS link_target_trace_id,
+            c.link_match_count AS link_match_count,
+            CASE
+              WHEN c.link_match_count = 1 THEN 'tracking_id_exact_match'
+              ELSE 'tracking_id_recent_match'
+            END AS link_mode
+          FROM unmatched AS u
+          INNER JOIN candidates AS c
+            ON u.tracking_id = c.tracking_id
+        ) AS s
+        ON f.feedback_id = s.feedback_id
+        WHEN MATCHED THEN UPDATE SET
+          f.link_mode = s.link_mode,
+          f.link_target_trace_id = s.link_target_trace_id,
+          f.link_match_count = s.link_match_count,
+          f.link_reason = 'tracking_id_match_reconciled'
+        """
+    )
+
+
 def process_batch(
     spark: SparkSession,
     batch_df,
     feedback_table: str,
     index_table: str,
+    lookback_hours: int,
+    max_rows: int,
 ) -> None:
-    """Process a micro batch for linking updates"""
     batch_df.createOrReplaceGlobalTempView("batch_traces")
     view_name = "global_temp.batch_traces"
     _merge_index_table(spark, index_table, view_name)
@@ -127,10 +246,15 @@ def process_batch(
     _merge_feedback_by_tracking_id(
         spark, feedback_table, index_table, view_name
     )
+    _reconcile_feedback_by_trace_id(
+        spark, feedback_table, index_table, lookback_hours, max_rows
+    )
+    _reconcile_feedback_by_tracking_id(
+        spark, feedback_table, index_table, lookback_hours, max_rows
+    )
 
 
 def main() -> None:
-    """Start the structured streaming job"""
     args = parse_args()
     spark = SparkSession.builder.getOrCreate()
     
@@ -138,29 +262,40 @@ def main() -> None:
 
     _create_index_table(spark, args.index_table)
 
-    trace_stream = (
+    trace_source = (
         spark.readStream
-        .option("skipChangeCommits", "true")
+        .option("ignoreChanges", "true")
         .option("ignoreDeletes", "true")
         .table(args.trace_table)
+    )
+
+    trace_stream = (
+        trace_source
         .select(
             F.col("trace_id").alias("trace_id"),
-            F.col("tags")["tracking_id"].alias("tracking_id"),
+            _build_tracking_id_expr(trace_source.columns).alias("tracking_id"),
             F.col("request_time").alias("request_time"),
         )
         .where(F.col("trace_id").isNotNull())
-        .withWatermark("request_time", f"{args.watermark_minutes} minutes")
-        .dropDuplicates(["trace_id"])
     )
 
+    checkpoint_location = _checkpoint_location(args.checkpoint, args.query_version)
+    print(f"Using checkpointLocation={checkpoint_location}")
+
     def process_batch_wrapper(batch_df, _batch_id) -> None:
-        """Delegate batch processing for each micro-batch."""
-        process_batch(spark, batch_df, args.feedback_table, args.index_table)
+        process_batch(
+            spark,
+            batch_df,
+            args.feedback_table,
+            args.index_table,
+            args.reconcile_lookback_hours,
+            args.reconcile_max_rows,
+        )
 
     (
         trace_stream.writeStream
         .foreachBatch(process_batch_wrapper)
-        .option("checkpointLocation", args.checkpoint)
+        .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime=f"{args.trigger_seconds} seconds")
         .start()
         .awaitTermination()
