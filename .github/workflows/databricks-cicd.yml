@@ -60,6 +60,13 @@ jobs:
   test:
     name: "Run tests"
     runs-on: ubuntu-latest
+    env:
+      BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
+      DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
+      DATABRICKS_ACCOUNT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_DEV_ACCOUNT_ID || secrets.DATABRICKS_DEV_ACCOUNT_ID }}
+      DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      DATABRICKS_WAREHOUSE_ID: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
 
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +84,9 @@ jobs:
 
       - name: Run pytest
         run: pytest tests/ -v --tb=short
+
+      - name: Run Databricks integration tests
+        run: pytest -m integration -q
 
   deploy:
     if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/') || startsWith(github.ref, 'refs/heads/bugfix/')) && github.event_name == 'push' }}
