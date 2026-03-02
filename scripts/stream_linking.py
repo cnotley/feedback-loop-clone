@@ -4,6 +4,8 @@ import argparse
 
 from pyspark.sql import SparkSession, functions as F
 
+STREAMING_QUERY_VERSION = "no_stateful_ops_v1"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -11,10 +13,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trace-table", required=True)
     parser.add_argument("--index-table", required=True)
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--query-version", default=STREAMING_QUERY_VERSION)
     parser.add_argument("--trigger-seconds", type=int, default=60)
     parser.add_argument("--reconcile-lookback-hours", type=int, default=168)
     parser.add_argument("--reconcile-max-rows", type=int, default=100000)
     return parser.parse_args()
+
+
+def _checkpoint_location(base_checkpoint: str, query_version: str) -> str:
+    base = base_checkpoint.rstrip("/")
+    return f"{base}/stream_query_{query_version}"
 
 
 def _tracking_id_source_names(columns: list[str]) -> list[str]:
@@ -271,6 +279,9 @@ def main() -> None:
         .where(F.col("trace_id").isNotNull())
     )
 
+    checkpoint_location = _checkpoint_location(args.checkpoint, args.query_version)
+    print(f"Using checkpointLocation={checkpoint_location}")
+
     def process_batch_wrapper(batch_df, _batch_id) -> None:
         process_batch(
             spark,
@@ -284,7 +295,7 @@ def main() -> None:
     (
         trace_stream.writeStream
         .foreachBatch(process_batch_wrapper)
-        .option("checkpointLocation", args.checkpoint)
+        .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime=f"{args.trigger_seconds} seconds")
         .start()
         .awaitTermination()

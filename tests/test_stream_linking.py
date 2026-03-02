@@ -244,6 +244,36 @@ def test_main_does_not_apply_watermark_or_dropduplicates(monkeypatch):
     assert "dropDuplicates" not in op_names
 
 
+def test_main_uses_versioned_checkpoint_location(monkeypatch):
+    argv = [
+        "prog",
+        "--feedback-table",
+        "f",
+        "--trace-table",
+        "t",
+        "--index-table",
+        "i",
+        "--checkpoint",
+        "dbfs:/tmp/feedback-linking-stream-v3",
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    fake_spark = RecordingSpark()
+
+    class _Builder:
+        def getOrCreate(self):
+            return fake_spark
+
+    monkeypatch.setattr(stream_linking.SparkSession, "builder", _Builder())
+    stream_linking.main()
+
+    ops = fake_spark.readStream.operations
+    checkpoint_ops = [op for op in ops if op[0] == "write_option" and op[1] == "checkpointLocation"]
+    assert checkpoint_ops, "checkpointLocation option must be set"
+    assert checkpoint_ops[0][2] == (
+        "dbfs:/tmp/feedback-linking-stream-v3/stream_query_no_stateful_ops_v1"
+    )
+
+
 def test_tracking_id_source_names_all_supported_paths():
     result = stream_linking._tracking_id_source_names(
         ["trace_id", "tracking_id", "tags", "trace_metadata"]
