@@ -9,6 +9,16 @@ from app.feedback_api.env_utils import get_env
 from app.feedback_api.sql_utils import execute_statement, sql_literal
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{value} is not a valid integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
 def _build_conditions(args: argparse.Namespace) -> List[str]:
     """Build WHERE clause conditions from CLI arguments"""
     conditions: List[str] = []
@@ -44,13 +54,13 @@ def _extract_row_count(rows) -> int:
 def main() -> None:
     """Parse args and purge feedback rows by condition"""
     parser = argparse.ArgumentParser(description="Purge feedback records")
-    parser.add_argument("--retention-days", type=int, default=None)
+    parser.add_argument("--retention-days", type=_non_negative_int, default=None)
     parser.add_argument("--tracking-id", type=str, default=None)
     parser.add_argument("--user-id", type=str, default=None)
     parser.add_argument("--pims", type=str, default=None)
     parser.add_argument(
         "--max-delete-rows",
-        type=int,
+        type=_non_negative_int,
         default=50000,
         help="Safety threshold for maximum rows to delete in one run",
     )
@@ -91,16 +101,16 @@ def main() -> None:
         )
     )
 
+    if args.dry_run:
+        print(json.dumps({"event": "purge_dry_run", "statement": statement}))
+        return
+
     if estimate_rows > args.max_delete_rows:
         raise SystemExit(
             "Refusing to delete estimated "
             f"{estimate_rows} rows (> {args.max_delete_rows}). "
             "Narrow scope or raise --max-delete-rows."
         )
-
-    if args.dry_run:
-        print(json.dumps({"event": "purge_dry_run", "statement": statement}))
-        return
 
     execute_statement(statement, warehouse_id)
     print(

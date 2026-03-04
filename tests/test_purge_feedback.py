@@ -44,6 +44,39 @@ def test_purge_dry_run_prints_plan_and_dry_run_event(monkeypatch, capsys):
     assert statements[0].startswith("SELECT COUNT(*)")
 
 
+def test_purge_dry_run_allows_large_scope(monkeypatch, capsys):
+    """Dry run does not fail when estimate exceeds max-delete-rows."""
+    monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
+    monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
+    statements = []
+
+    def fake_execute(statement, _warehouse_id):
+        statements.append(statement)
+        if statement.startswith("SELECT COUNT(*)"):
+            return [[60000]]
+        return []
+
+    monkeypatch.setattr("scripts.purge_feedback.execute_statement", fake_execute)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "prog",
+            "--tracking-id",
+            "track-1",
+            "--dry-run",
+            "--max-delete-rows",
+            "50000",
+        ],
+    )
+
+    purge_feedback.main()
+    out = capsys.readouterr().out
+    assert '"event": "purge_plan"' in out
+    assert '"event": "purge_dry_run"' in out
+    assert len(statements) == 1
+    assert statements[0].startswith("SELECT COUNT(*)")
+
+
 def test_purge_refuses_large_delete(monkeypatch):
     """Purge fails when estimate exceeds max-delete-rows"""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
@@ -65,6 +98,23 @@ def test_purge_refuses_large_delete(monkeypatch):
     )
 
     with pytest.raises(SystemExit, match="Refusing to delete estimated"):
+        purge_feedback.main()
+
+
+def test_purge_rejects_negative_retention_days(monkeypatch):
+    """Negative retention-days argument is rejected."""
+    monkeypatch.setattr("sys.argv", ["prog", "--retention-days", "-1", "--dry-run"])
+    with pytest.raises(SystemExit):
+        purge_feedback.main()
+
+
+def test_purge_rejects_negative_max_delete_rows(monkeypatch):
+    """Negative max-delete-rows argument is rejected."""
+    monkeypatch.setattr(
+        "sys.argv",
+        ["prog", "--tracking-id", "track-1", "--dry-run", "--max-delete-rows", "-1"],
+    )
+    with pytest.raises(SystemExit):
         purge_feedback.main()
 
 

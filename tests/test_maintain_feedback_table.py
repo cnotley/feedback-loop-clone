@@ -1,5 +1,7 @@
 """Tests for feedback table maintenance script"""
 
+import pytest
+
 from scripts import maintain_feedback_table
 
 
@@ -33,9 +35,16 @@ def test_maintain_executes_optimize_and_vacuum(monkeypatch):
         return []
 
     monkeypatch.setattr("scripts.maintain_feedback_table.execute_statement", fake_execute)
-    monkeypatch.setattr("sys.argv", ["prog", "--vacuum-retain-hours", "72"])
+    monkeypatch.setattr("sys.argv", ["prog", "--vacuum-retain-hours", "168"])
 
     maintain_feedback_table.main()
     assert len(statements) == 2
     assert statements[0] == "OPTIMIZE db.schema.table"
-    assert statements[1] == "VACUUM db.schema.table RETAIN 72 HOURS"
+    assert statements[1] == "VACUUM db.schema.table RETAIN 168 HOURS"
+
+
+def test_maintain_rejects_sub_minimum_vacuum_retention(monkeypatch):
+    """Sub-minimum VACUUM retention is rejected."""
+    monkeypatch.setattr("sys.argv", ["prog", "--vacuum-retain-hours", "72"])
+    with pytest.raises(SystemExit):
+        maintain_feedback_table.main()

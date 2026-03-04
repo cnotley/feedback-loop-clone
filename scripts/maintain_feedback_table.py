@@ -8,6 +8,15 @@ from app.feedback_api.env_utils import get_env
 from app.feedback_api.sql_utils import execute_statement
 
 
+def _vacuum_retain_hours(value: str) -> int:
+    parsed = int(value)
+    if parsed < 168:
+        raise argparse.ArgumentTypeError(
+            "--vacuum-retain-hours must be >= 168"
+        )
+    return parsed
+
+
 def _log_event(event: dict) -> None:
     """Emit a JSON log line for maintenance telemetry"""
     print(json.dumps(event, default=str))
@@ -28,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Maintain feedback Delta table")
     parser.add_argument("--table", type=str, default=None)
     parser.add_argument("--warehouse-id", type=str, default=None)
-    parser.add_argument("--vacuum-retain-hours", type=int, default=168)
+    parser.add_argument("--vacuum-retain-hours", type=_vacuum_retain_hours, default=168)
     parser.add_argument("--skip-optimize", action="store_true")
     parser.add_argument("--skip-vacuum", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
