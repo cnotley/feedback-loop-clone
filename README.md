@@ -72,7 +72,7 @@ Example request:
 Responses:
 - `200` accepted with `feedback_id`
 - `400` validation or policy failure
-- `409` duplicate payload
+- `200` duplicate payload retries are idempotent and return the same `feedback_id`
 - `429` rate limiting
 - `500` ingestion or policy check failure
 

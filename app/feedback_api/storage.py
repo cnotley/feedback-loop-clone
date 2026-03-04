@@ -44,11 +44,43 @@ def write_feedback(
     feedback_id = _feedback_id_for_payload_hash(digest)
     ingested_at = datetime.now(timezone.utc).isoformat()
 
-    if payload_hash_exists(digest):
-        return feedback_id, True
-
     statement = f"""
-    INSERT INTO {table} (
+    MERGE INTO {table} AS target
+    USING (
+        SELECT
+            {sql_literal(feedback_id)} AS feedback_id,
+            {sql_literal(payload.tracking_id)} AS tracking_id,
+            {sql_literal(payload.trace_id)} AS trace_id,
+            {sql_literal(payload.site_id)} AS site_id,
+            {sql_literal(payload.user_id)} AS user_id,
+            {sql_literal(payload.pims_id)} AS pims_id,
+            {sql_literal(payload.pims)} AS pims,
+            {sql_literal(payload.feedback_boolean)} AS feedback_boolean,
+            {sql_literal(payload.feedback_score_1)} AS feedback_score_1,
+            {sql_literal(payload.feedback_score_2)} AS feedback_score_2,
+            {sql_literal(payload.feedback_comment_1)} AS feedback_comment_1,
+            {sql_literal(payload.feedback_comment_2)} AS feedback_comment_2,
+            {sql_literal(payload.timestamp.isoformat())} AS timestamp,
+            {sql_literal(payload.schema_version)} AS schema_version,
+            {sql_literal(ingested_at)} AS ingested_at,
+            {sql_literal(payload.source_app)} AS source_app,
+            {sql_literal(payload.service_name)} AS service_name,
+            {sql_literal(payload.consumer_id)} AS consumer_id,
+            {sql_literal(payload.request_id)} AS request_id,
+            {sql_literal(digest)} AS payload_hash,
+            {sql_literal(link_info.get("link_mode"))} AS link_mode,
+            {sql_literal(link_info.get("link_target_trace_id"))} AS link_target_trace_id,
+            {sql_literal(link_info.get("link_window_seconds"))} AS link_window_seconds,
+            {sql_literal(link_info.get("link_match_count"))} AS link_match_count,
+            {sql_literal(link_info.get("link_reason"))} AS link_reason,
+            NULL AS auth_subject,
+            NULL AS auth_scopes,
+            TRUE AS is_valid,
+            NULL AS validation_errors
+    ) AS source
+    ON target.payload_hash = source.payload_hash
+    WHEN NOT MATCHED THEN
+      INSERT (
         feedback_id,
         tracking_id,
         trace_id,
@@ -78,44 +110,51 @@ def write_feedback(
         auth_scopes,
         is_valid,
         validation_errors
-    )
-    SELECT
-        {sql_literal(feedback_id)},
-        {sql_literal(payload.tracking_id)},
-        {sql_literal(payload.trace_id)},
-        {sql_literal(payload.site_id)},
-        {sql_literal(payload.user_id)},
-        {sql_literal(payload.pims_id)},
-        {sql_literal(payload.pims)},
-        {sql_literal(payload.feedback_boolean)},
-        {sql_literal(payload.feedback_score_1)},
-        {sql_literal(payload.feedback_score_2)},
-        {sql_literal(payload.feedback_comment_1)},
-        {sql_literal(payload.feedback_comment_2)},
-        {sql_literal(payload.timestamp.isoformat())},
-        {sql_literal(payload.schema_version)},
-        {sql_literal(ingested_at)},
-        {sql_literal(payload.source_app)},
-        {sql_literal(payload.service_name)},
-        {sql_literal(payload.consumer_id)},
-        {sql_literal(payload.request_id)},
-        {sql_literal(digest)},
-        {sql_literal(link_info.get("link_mode"))},
-        {sql_literal(link_info.get("link_target_trace_id"))},
-        {sql_literal(link_info.get("link_window_seconds"))},
-        {sql_literal(link_info.get("link_match_count"))},
-        {sql_literal(link_info.get("link_reason"))},
-        NULL,
-        NULL,
-        TRUE,
-        NULL
-    WHERE NOT EXISTS (
-        SELECT 1 FROM {table} WHERE payload_hash = {sql_literal(digest)}
-    )
+      )
+      VALUES (
+        source.feedback_id,
+        source.tracking_id,
+        source.trace_id,
+        source.site_id,
+        source.user_id,
+        source.pims_id,
+        source.pims,
+        source.feedback_boolean,
+        source.feedback_score_1,
+        source.feedback_score_2,
+        source.feedback_comment_1,
+        source.feedback_comment_2,
+        source.timestamp,
+        source.schema_version,
+        source.ingested_at,
+        source.source_app,
+        source.service_name,
+        source.consumer_id,
+        source.request_id,
+        source.payload_hash,
+        source.link_mode,
+        source.link_target_trace_id,
+        source.link_window_seconds,
+        source.link_match_count,
+        source.link_reason,
+        source.auth_subject,
+        source.auth_scopes,
+        source.is_valid,
+        source.validation_errors
+      )
     """
     execute_statement(statement, warehouse_id)
 
-    return feedback_id, False
+    inserted_statement = f"""
+    SELECT 1
+    FROM {table}
+    WHERE payload_hash = {sql_literal(digest)}
+      AND feedback_id = {sql_literal(feedback_id)}
+      AND ingested_at = {sql_literal(ingested_at)}
+    LIMIT 1
+    """
+    inserted = bool(execute_statement(inserted_statement, warehouse_id))
+    return feedback_id, not inserted
 
 
 def payload_hash_exists(payload_hash_value: str) -> bool:

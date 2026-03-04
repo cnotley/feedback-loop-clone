@@ -84,7 +84,7 @@ def test_submit_feedback_validation_error(client):
     assert resp.json()["detail"]["error"] == "validation_failed"
 
 
-def test_submit_feedback_dedup_rejected(client, monkeypatch):
+def test_submit_feedback_dedup_idempotent(client, monkeypatch):
     """Duplicate payload is idempotent and returns accepted with same feedback_id."""
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
     monkeypatch.setattr("app.feedback_api.api.write_feedback", lambda *args, **kwargs: ("fb_1", True))
