@@ -28,6 +28,9 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 logger.setLevel(_get_log_level())
+_dd_socket = None
+_dd_target = None
+_dd_lock = Lock()
 
 
 def get_or_create_correlation_id(request: Request) -> str:
@@ -128,7 +131,7 @@ class Metrics:
                     "rejected_by_reason": rejected_by_reason,
                 },
                 "auth": {
-                    "failures": counters.get("auth_failures", 0),
+                    "invalid_attempts": counters.get("invalid_auth_attempts", 0),
                 },
                 "link_modes": link_modes,
                 "dedup_events": {
@@ -180,11 +183,17 @@ def _emit_datadog_metric(name: str, value: int, metric_type: str) -> None:
     if tags:
         payload = f"{payload}|#{','.join(tags)}"
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(payload.encode("utf-8"), (host, port))
-        finally:
-            sock.close()
+        global _dd_socket, _dd_target
+        target = (host, port)
+        if _dd_socket is None or _dd_target != target:
+            with _dd_lock:
+                if _dd_socket is not None and _dd_target != target:
+                    _dd_socket.close()
+                    _dd_socket = None
+                if _dd_socket is None:
+                    _dd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    _dd_target = target
+        _dd_socket.sendto(payload.encode("utf-8"), target)
     except Exception:  # pylint: disable=broad-exception-caught
         return
 

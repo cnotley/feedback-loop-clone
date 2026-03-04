@@ -365,7 +365,7 @@ def create_app() -> FastAPI:
 
         auth_header = request.headers.get("authorization") or ""
         if auth_header and not auth_header.lower().startswith("bearer "):
-            metrics.inc("auth_failures")
+            metrics.inc("invalid_auth_attempts")
             log_event(
                 {
                     "event": "auth_failure",
@@ -388,7 +388,7 @@ def create_app() -> FastAPI:
                     detail_message="token limit exceeded",
                 )
             else:
-                metrics.inc("auth_failures")
+                metrics.inc("invalid_auth_attempts")
                 log_event(
                     {
                         "event": "auth_failure",

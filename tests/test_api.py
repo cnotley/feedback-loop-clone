@@ -92,7 +92,7 @@ def test_metrics_increment_on_representative_paths(client, monkeypatch):
         after["metrics"]["submissions"]["rejected_by_reason"]["validation_schema_violations"]
         >= before["metrics"]["submissions"]["rejected_by_reason"]["validation_schema_violations"] + 1
     )
-    assert after["metrics"]["auth"]["failures"] >= before["metrics"]["auth"]["failures"] + 1
+    assert after["metrics"]["auth"]["invalid_attempts"] >= before["metrics"]["auth"]["invalid_attempts"] + 1
     assert after["metrics"]["requests"]["total"] >= before["metrics"]["requests"]["total"] + 3
     assert after["metrics"]["requests"]["latency_ms"]["count"] >= before["metrics"]["requests"]["latency_ms"]["count"] + 3
 
