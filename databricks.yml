@@ -85,4 +85,4 @@ targets:
     mode: production
     workspace:
     variables:
-      feedback_table: "llm_prod.voice_to_soap.feedback_ingest"
+      feedback_table: "llm_sandbox.voice_to_soap.feedback_ingest"
