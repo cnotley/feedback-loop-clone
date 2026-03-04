@@ -1,0 +1,33 @@
+resources:
+  jobs:
+    feedback-link-reconcile-sweep:
+      name: feedback-link-reconcile-sweep
+      tasks:
+        - task_key: reconcile-feedback-links
+          job_cluster_key: feedback-link-reconcile-cluster
+          spark_python_task:
+            python_file: ../../scripts/reconcile_feedback_links.py
+            parameters:
+              - --feedback-table
+              - ${var.feedback_table}
+              - --index-table
+              - ${var.trace_index_table}
+              - --lookback-hours
+              - ${var.link_reconcile_sweep_lookback_hours}
+              - --max-rows
+              - ${var.link_reconcile_sweep_max_rows}
+          max_retries: 1
+          timeout_seconds: 0
+      permissions:
+        - level: CAN_MANAGE_RUN
+          user_name: chris-notley@idexx.com
+      job_clusters:
+        - job_cluster_key: feedback-link-reconcile-cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: i3.xlarge
+            num_workers: 1
+            data_security_mode: SINGLE_USER
+            runtime_engine: STANDARD
+            aws_attributes:
+              availability: ON_DEMAND
