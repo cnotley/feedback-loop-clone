@@ -3,8 +3,8 @@
 import argparse
 import json
 import logging
-import time
 import traceback
+from time import perf_counter
 
 from pyspark.sql import SparkSession, functions as F
 
@@ -134,7 +134,7 @@ def process_batch(
     feedback_table: str,
     index_table: str,
 ) -> dict:
-    """Process a micro batch for linking updates.
+    """Execute linking merge operations for one micro-batch.
 
     Returns:
         Dict containing timing information for merge operations.
@@ -144,19 +144,26 @@ def process_batch(
 
     timings_ms: dict[str, int] = {}
 
-    start = time.time()
+    start = perf_counter()
     _merge_index_table(spark, index_table, view_name)
-    timings_ms["merge_index_ms"] = int((time.time() - start) * 1000)
+    timings_ms["merge_index_ms"] = int((perf_counter() - start) * 1000)
 
-    start = time.time()
+    start = perf_counter()
     _merge_feedback_by_trace_id(spark, feedback_table, view_name)
-    timings_ms["merge_feedback_trace_id_ms"] = int((time.time() - start) * 1000)
+    timings_ms["merge_feedback_trace_id_ms"] = int((perf_counter() - start) * 1000)
 
-    start = time.time()
+    start = perf_counter()
     _merge_feedback_by_tracking_id(spark, feedback_table, index_table, view_name)
-    timings_ms["merge_feedback_tracking_id_ms"] = int((time.time() - start) * 1000)
+    timings_ms["merge_feedback_tracking_id_ms"] = int((perf_counter() - start) * 1000)
 
     return timings_ms
+
+
+def _get_input_row_count(batch_df) -> int | None:
+    try:
+        return int(batch_df.count())
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
 
 
 def process_microbatch(
@@ -168,29 +175,28 @@ def process_microbatch(
     index_table: str,
 ) -> None:
     """Wrapper for foreachBatch with logging and fail-fast behavior."""
-    batch_start = time.time()
+    batch_start = perf_counter()
     row_count = None
+    persisted = False
+    cached_batch_df = batch_df
     try:
-        row_count = int(batch_df.count())
-    except Exception:  # pylint: disable=broad-exception-caught
-        row_count = None
-
-    log_event(
-        {
-            "event": "microbatch_start",
-            "batch_id": batch_id,
-            "input_row_count": row_count,
-        }
-    )
-
-    try:
-        timings_ms = process_batch(spark, batch_df, feedback_table, index_table)
+        cached_batch_df = batch_df.persist()
+        persisted = True
+        row_count = _get_input_row_count(cached_batch_df)
+        log_event(
+            {
+                "event": "microbatch_start",
+                "batch_id": batch_id,
+                "input_row_count": row_count,
+            }
+        )
+        timings_ms = process_batch(spark, cached_batch_df, feedback_table, index_table)
         log_event(
             {
                 "event": "microbatch_success",
                 "batch_id": batch_id,
                 "input_row_count": row_count,
-                "elapsed_ms": int((time.time() - batch_start) * 1000),
+                "elapsed_ms": int((perf_counter() - batch_start) * 1000),
                 **timings_ms,
             }
         )
@@ -200,13 +206,15 @@ def process_microbatch(
                 "event": "microbatch_failed",
                 "batch_id": batch_id,
                 "input_row_count": row_count,
-                "elapsed_ms": int((time.time() - batch_start) * 1000),
+                "elapsed_ms": int((perf_counter() - batch_start) * 1000),
                 "error": str(exc),
                 "traceback": traceback.format_exc(),
             }
         )
-
         raise
+    finally:
+        if persisted:
+            cached_batch_df.unpersist()
 
 
 def main() -> None:
@@ -233,19 +241,17 @@ def main() -> None:
         .dropDuplicates(["trace_id"])
     )
 
-    def process_batch_wrapper(batch_df, batch_id) -> None:
-        """Delegate batch processing for each micro-batch."""
-        process_microbatch(
-            spark=spark,
-            batch_df=batch_df,
-            batch_id=batch_id,
-            feedback_table=args.feedback_table,
-            index_table=args.index_table,
-        )
-
     (
         trace_stream.writeStream
-        .foreachBatch(process_batch_wrapper)
+        .foreachBatch(
+            lambda batch_df, batch_id: process_microbatch(
+                spark=spark,
+                batch_df=batch_df,
+                batch_id=batch_id,
+                feedback_table=args.feedback_table,
+                index_table=args.index_table,
+            )
+        )
         .option("checkpointLocation", args.checkpoint)
         .trigger(processingTime=f"{args.trigger_seconds} seconds")
         .start()

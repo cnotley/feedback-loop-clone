@@ -1,6 +1,8 @@
 """Tests for the stream linking job SQL and batching."""
 # pylint: disable=invalid-name,protected-access,duplicate-code
 
+import pytest
+
 from scripts import stream_linking
 
 
@@ -33,6 +35,8 @@ class FakeBatchDF:  # pylint: disable=too-few-public-methods
         self.rdd = FakeRDD(empty)
         self.view_name = None
         self._count = 0 if empty else 1
+        self.persisted = False
+        self.unpersisted = False
 
     def createOrReplaceGlobalTempView(self, name: str):
         """Capture created view name for assertions."""
@@ -41,6 +45,15 @@ class FakeBatchDF:  # pylint: disable=too-few-public-methods
     def count(self) -> int:
         """Return a configured row count."""
         return self._count
+
+    def persist(self):
+        """Record persist usage and return this DataFrame."""
+        self.persisted = True
+        return self
+
+    def unpersist(self):
+        """Record unpersist usage."""
+        self.unpersisted = True
 
 
 def test_create_index_table_sql():
@@ -84,8 +97,8 @@ def test_merge_feedback_by_tracking_id_uses_view():
     assert "FROM index_tbl" in query
 
 
-def test_process_batch_skips_empty():
-    """Empty batches are processed (isEmpty check removed for resilience)."""
+def test_process_batch_processes_empty_batch():
+    """Empty batches still execute merge operations."""
     spark = FakeSpark()
     batch_df = FakeBatchDF(empty=True)
     stream_linking.process_batch(spark, batch_df, "feedback_tbl", "index_tbl")
@@ -135,7 +148,7 @@ def test_process_microbatch_logs_and_reraises_on_error(monkeypatch):
     monkeypatch.setattr(stream_linking, "log_event", lambda event: events.append(event))
     monkeypatch.setattr(stream_linking, "process_batch", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    try:
+    with pytest.raises(RuntimeError) as excinfo:
         stream_linking.process_microbatch(
             spark=spark,
             batch_df=batch_df,
@@ -143,15 +156,15 @@ def test_process_microbatch_logs_and_reraises_on_error(monkeypatch):
             feedback_table="feedback_tbl",
             index_table="index_tbl",
         )
-        assert False, "expected exception"
-    except RuntimeError as exc:
-        assert "boom" in str(exc)
+    assert "boom" in str(excinfo.value)
 
     assert events[0]["event"] == "microbatch_start"
     assert events[0]["batch_id"] == 7
     assert events[-1]["event"] == "microbatch_failed"
     assert events[-1]["batch_id"] == 7
     assert "traceback" in events[-1]
+    assert batch_df.persisted is True
+    assert batch_df.unpersisted is True
 
 
 def test_process_microbatch_logs_success(monkeypatch):
@@ -184,3 +197,5 @@ def test_process_microbatch_logs_success(monkeypatch):
     assert events[-1]["batch_id"] == 8
     assert "elapsed_ms" in events[-1]
     assert events[-1]["merge_index_ms"] == 1
+    assert batch_df.persisted is True
+    assert batch_df.unpersisted is True
