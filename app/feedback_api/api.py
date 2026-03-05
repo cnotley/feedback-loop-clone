@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from .models import FeedbackPayload, FeedbackResponse, ErrorResponse
 from .rate_limit import RateLimiter
 from .validation import validate_payload
-from .storage import DuplicatePayloadError, write_feedback, payload_hash
+from .storage import write_feedback, payload_hash
 from .storage import tracking_id_recent_exists
 from .linking import link_run
 from .linking import get_trace_timestamp
@@ -215,24 +215,20 @@ def _ingest_feedback(
         digest = payload_hash(payload)
         link_info = link_run(payload)
         metrics.inc(f"link_mode_{link_info.get('link_mode', 'unknown')}")
-        feedback_id = write_feedback(payload, link_info, payload_hash_value=digest)
-        return feedback_id, link_info, digest
-    except DuplicatePayloadError as exc:
-        metrics.inc("dedup_rejected")
-        log_event(
-            {
-                "event": "dedup_rejected",
-                "correlation_id": correlation_id,
-                "payload_hash": digest,
-            }
+        feedback_id, was_duplicate = write_feedback(
+            payload, link_info, payload_hash_value=digest
         )
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "duplicate_payload",
-                "details": ["payload_hash already ingested"],
-            },
-        ) from exc
+        if was_duplicate:
+            metrics.inc("dedup_hit")
+            log_event(
+                {
+                    "event": "dedup_hit",
+                    "correlation_id": correlation_id,
+                    "payload_hash": digest,
+                    "feedback_id": feedback_id,
+                }
+            )
+        return feedback_id, link_info, digest
     except Exception as exc:
         metrics.inc("ingestion_failed")
         log_event(
@@ -322,7 +318,6 @@ def create_app() -> FastAPI:
         response_model=FeedbackResponse,
         responses={
             400: {"model": ErrorResponse},
-            409: {"model": ErrorResponse},
             429: {"model": ErrorResponse},
             500: {"model": ErrorResponse},
         },
