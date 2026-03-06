@@ -18,20 +18,28 @@ def test_metrics_increment():
     assert metrics.counters["a"] == 2
 
 
-def test_metrics_snapshot_contains_groups():
+def test_metrics_snapshot_contains_groups(monkeypatch):
     """Snapshot exposes JSON friendly grouped metrics"""
+    monkeypatch.setenv("DD_AGENT_HOST", "127.0.0.1")
+    monkeypatch.setenv("DD_METRIC_NAMESPACE", "feedback_api_test")
     metrics = Metrics()
     metrics.inc("accepted")
     metrics.inc("validation_failed")
     metrics.inc("link_mode_trace_id_match")
+    metrics.inc("dedup_hit")
     metrics.observe_ms("request_latency_ms", 12)
     metrics.observe_ms("request_latency_ms", 20)
     snapshot = metrics.snapshot()
     assert snapshot["service"] == "feedback-api"
+    assert snapshot["datadog"]["enabled"] is True
+    assert snapshot["datadog"]["namespace"] == "feedback_api_test"
     assert "metrics" in snapshot
     assert snapshot["metrics"]["submissions"]["accepted"] == 1
     assert snapshot["metrics"]["submissions"]["rejected_by_reason"]["validation_schema_violations"] == 1
+    assert snapshot["metrics"]["submissions"]["rejected_by_reason"]["dedup"] == 0
     assert snapshot["metrics"]["link_modes"]["trace_id_match"] == 1
+    assert snapshot["metrics"]["dedup_events"]["hits"] == 1
+    assert snapshot["metrics"]["dedup_events"]["rejected"] == 0
     latency_metrics = snapshot["metrics"]["requests"]["latency_ms"]
     assert latency_metrics["count"] == 2
     assert latency_metrics["min_ms"] == 12

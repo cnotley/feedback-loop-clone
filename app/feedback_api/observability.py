@@ -97,13 +97,15 @@ class Metrics:
             + counters.get("rate_limited_token", 0)
             + counters.get("rate_limited_user", 0)
         )
+        dedup_hits = counters.get("dedup_hit", 0)
+        dedup_rejected = counters.get("dedup_rejected", 0)
         rejected_by_reason = {
             "validation_schema_violations": counters.get("validation_failed", 0),
             "rate_limited": rate_limited_total,
             "policy_failures": counters.get("policy_check_failed", 0)
             + counters.get("trace_policy_rejected", 0)
             + counters.get("tracking_policy_rejected", 0),
-            "dedup": counters.get("dedup_rejected", 0),
+            "dedup": dedup_rejected,
         }
         link_modes = {
             key.replace("link_mode_", ""): value
@@ -135,7 +137,8 @@ class Metrics:
                 },
                 "link_modes": link_modes,
                 "dedup_events": {
-                    "rejected": counters.get("dedup_rejected", 0),
+                    "hits": dedup_hits,
+                    "rejected": dedup_rejected,
                 },
                 "requests": {
                     "total": counters.get("requests_total", 0),

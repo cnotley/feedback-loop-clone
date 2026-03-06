@@ -60,20 +60,31 @@ def test_metrics_endpoint(client):
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["service"] == "feedback-api"
+    assert "datadog" in payload
     assert "metrics" in payload
     assert "counters" in payload
     assert "submissions" in payload["metrics"]
+    assert "auth" in payload["metrics"]
+    assert "link_modes" in payload["metrics"]
+    assert "dedup_events" in payload["metrics"]
     assert "requests" in payload["metrics"]
 
 
 def test_metrics_increment_on_representative_paths(client, monkeypatch):
     """Metrics increment across accepted, rejected, and auth failure paths"""
     before = client.get("/metrics").json()
+    write_results = iter(
+        [
+            ("fb_1", False),
+            ("fb_2", False),
+            ("fb_1", True),
+        ]
+    )
 
     monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id_match"})
     monkeypatch.setattr(
         "app.feedback_api.api.write_feedback",
-        lambda payload, link_info, payload_hash_value=None: ("fb_1", False),
+        lambda payload, link_info, payload_hash_value=None: next(write_results),
     )
     monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
 
@@ -87,16 +98,53 @@ def test_metrics_increment_on_representative_paths(client, monkeypatch):
         ).status_code
         == 200
     )
+    assert client.post("/feedback/submit", json=_payload()).status_code == 200
 
     after = client.get("/metrics").json()
-    assert after["metrics"]["submissions"]["accepted"] >= before["metrics"]["submissions"]["accepted"] + 2
+    assert after["metrics"]["submissions"]["accepted"] >= before["metrics"]["submissions"]["accepted"] + 3
     assert (
         after["metrics"]["submissions"]["rejected_by_reason"]["validation_schema_violations"]
         >= before["metrics"]["submissions"]["rejected_by_reason"]["validation_schema_violations"] + 1
     )
+    assert (
+        after["metrics"]["submissions"]["rejected_by_reason"]["dedup"]
+        == before["metrics"]["submissions"]["rejected_by_reason"]["dedup"]
+    )
     assert after["metrics"]["auth"]["invalid_attempts"] >= before["metrics"]["auth"]["invalid_attempts"] + 1
-    assert after["metrics"]["requests"]["total"] >= before["metrics"]["requests"]["total"] + 3
-    assert after["metrics"]["requests"]["latency_ms"]["count"] >= before["metrics"]["requests"]["latency_ms"]["count"] + 3
+    assert after["metrics"]["link_modes"]["trace_id_match"] >= before["metrics"]["link_modes"]["trace_id_match"] + 3
+    assert after["metrics"]["dedup_events"]["hits"] >= before["metrics"]["dedup_events"]["hits"] + 1
+    assert after["metrics"]["dedup_events"]["rejected"] == before["metrics"]["dedup_events"]["rejected"]
+    assert after["metrics"]["requests"]["total"] >= before["metrics"]["requests"]["total"] + 4
+    assert after["metrics"]["requests"]["latency_ms"]["count"] >= before["metrics"]["requests"]["latency_ms"]["count"] + 4
+
+
+def test_submit_feedback_dedup_hit_counts_as_event_not_rejection(client, monkeypatch):
+    """Duplicate replays remain accepted while incrementing dedup event metrics."""
+    before = client.get("/metrics").json()
+    write_results = iter(
+        [
+            ("fb_1", False),
+            ("fb_1", True),
+        ]
+    )
+
+    monkeypatch.setattr("app.feedback_api.api.link_run", lambda payload: {"link_mode": "trace_id"})
+    monkeypatch.setattr(
+        "app.feedback_api.api.write_feedback",
+        lambda payload, link_info, payload_hash_value=None: next(write_results),
+    )
+    monkeypatch.setattr("app.feedback_api.api.payload_hash", lambda payload: "hash1")
+
+    assert client.post("/feedback/submit", json=_payload()).status_code == 200
+    assert client.post("/feedback/submit", json=_payload()).status_code == 200
+
+    after = client.get("/metrics").json()
+    assert after["metrics"]["dedup_events"]["hits"] >= before["metrics"]["dedup_events"]["hits"] + 1
+    assert (
+        after["metrics"]["submissions"]["rejected_by_reason"]["dedup"]
+        == before["metrics"]["submissions"]["rejected_by_reason"]["dedup"]
+    )
+    assert after["metrics"]["submissions"]["accepted"] >= before["metrics"]["submissions"]["accepted"] + 2
 
 
 def test_submit_feedback_happy_path(client, monkeypatch):
