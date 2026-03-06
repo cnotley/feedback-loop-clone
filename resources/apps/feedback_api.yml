@@ -4,6 +4,8 @@ resources:
       permissions:
         - level: CAN_USE
           user_name: Philip-Mathieu@idexx.com
+        - level: CAN_USE
+          user_name: Chris-Notley@idexx.com
       name: ${var.app_name}
       description: Feedback API service
       source_code_path: ../../app
