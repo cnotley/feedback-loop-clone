@@ -32,10 +32,10 @@ resources:
       job_clusters:
         - job_cluster_key: feedback-linking-stream-cluster
           new_cluster:
-            spark_version: ${var.link_spark_version}
-            node_type_id: ${var.link_node_type_id}
-            num_workers: ${var.link_num_workers}
-            data_security_mode: ${var.link_data_security_mode}
-            runtime_engine: ${var.link_runtime_engine}
+            spark_version: ${var.link_stream_spark_version}
+            node_type_id: ${var.link_stream_node_type_id}
+            num_workers: ${var.link_stream_num_workers}
+            data_security_mode: ${var.link_stream_data_security_mode}
+            runtime_engine: ${var.link_stream_runtime_engine}
             aws_attributes:
-              availability: ${var.link_aws_availability}
+              availability: ${var.link_stream_aws_availability}

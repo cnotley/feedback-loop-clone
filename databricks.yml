@@ -65,25 +65,22 @@ variables:
   link_stream_trigger_seconds:
     description: "Streaming trigger interval in seconds"
     default: 60
-  link_stream_watermark_minutes:
-    description: "Watermark (minutes) for trace stream lateness"
-    default: 15
-  link_spark_version:
+  link_stream_spark_version:
     description: "Spark version for the linking stream cluster"
     default: "15.4.x-scala2.12"
-  link_node_type_id:
+  link_stream_node_type_id:
     description: "Node type for the linking stream cluster"
     default: "i3.xlarge"
-  link_num_workers:
+  link_stream_num_workers:
     description: "Number of workers for the linking stream cluster"
     default: 1
-  link_data_security_mode:
+  link_stream_data_security_mode:
     description: "Data security mode for the linking stream cluster"
     default: "SINGLE_USER"
-  link_runtime_engine:
+  link_stream_runtime_engine:
     description: "Runtime engine for the linking stream cluster"
     default: "STANDARD"
-  link_aws_availability:
+  link_stream_aws_availability:
     description: "AWS availability setting for the linking stream cluster"
     default: "ON_DEMAND"
   link_reconcile_lookback_hours:
