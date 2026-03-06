@@ -8,7 +8,6 @@ import pytest
 
 from app.feedback_api.models import FeedbackPayload
 from app.feedback_api.storage import (
-    DuplicatePayloadError,
     payload_hash,
     payload_hash_exists,
     tracking_id_recent_exists,
@@ -64,29 +63,41 @@ def test_tracking_id_recent_exists(monkeypatch):
 
 
 def test_write_feedback_duplicate(monkeypatch):
-    """Duplicate payloads raise DuplicatePayloadError."""
+    """Duplicate payloads are idempotent and return was_duplicate=True."""
     monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
-    monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: True)
-    payload = _payload()
-    with pytest.raises(DuplicatePayloadError):
-        write_feedback(payload, {"link_mode": "trace_id"})
-
-
-def test_write_feedback_executes(monkeypatch):
-    """Insert statement is executed and returns feedback_id."""
-    monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
-    monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
-    monkeypatch.setattr("app.feedback_api.storage.payload_hash_exists", lambda *args, **kwargs: False)
-    called = {}
+    statements = []
 
     def fake_execute(statement, warehouse_id):
-        """Capture statement for assertions."""
-        called["statement"] = statement
+        statements.append(statement)
+        if "WHERE payload_hash" in statement and "AND ingested_at" in statement:
+            return []
         return []
 
     monkeypatch.setattr("app.feedback_api.storage.execute_statement", fake_execute)
     payload = _payload()
-    feedback_id = write_feedback(payload, {"link_mode": "trace_id"})
+    feedback_id, was_duplicate = write_feedback(payload, {"link_mode": "trace_id"})
     assert feedback_id.startswith("fb_")
-    assert "INSERT INTO" in called["statement"]
+    assert was_duplicate is True
+    assert any("MERGE INTO" in stmt for stmt in statements)
+
+
+def test_write_feedback_executes(monkeypatch):
+    """Insert statement is executed and returns (feedback_id, was_duplicate=False)."""
+    monkeypatch.setenv("FEEDBACK_TABLE", "db.schema.table")
+    monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "wh-1")
+    statements = []
+
+    def fake_execute(statement, warehouse_id):
+        """Capture statement for assertions."""
+        statements.append(statement)
+        if "WHERE payload_hash" in statement and "AND ingested_at" in statement:
+            return [[1]]
+        return []
+
+    monkeypatch.setattr("app.feedback_api.storage.execute_statement", fake_execute)
+    payload = _payload()
+    feedback_id, was_duplicate = write_feedback(payload, {"link_mode": "trace_id"})
+    assert feedback_id.startswith("fb_")
+    assert was_duplicate is False
+    assert any("MERGE INTO" in stmt for stmt in statements)
