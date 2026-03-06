@@ -8,7 +8,57 @@ import logging
 import traceback
 from time import perf_counter
 
-from pyspark.sql import SparkSession, functions as F
+try:
+    from pyspark.sql import SparkSession, functions as F
+except ModuleNotFoundError as exc:
+    _PYSPARK_IMPORT_ERROR = exc
+
+    class _Expression:
+        """Small expression shim used by tests when pyspark is unavailable."""
+
+        def __init__(self, value):
+            self.value = value
+
+        def __getitem__(self, key):
+            return _Expression(f"{self.value}[{key}]")
+
+        def cast(self, dtype):
+            return _Expression(f"cast({self.value} as {dtype})")
+
+        def alias(self, name):
+            return _Expression(f"{self.value} as {name}")
+
+        def isNotNull(self):
+            return _Expression(f"{self.value} is not null")
+
+    class _FallbackFunctions:
+        """Subset of pyspark.sql.functions used by unit tests."""
+
+        @staticmethod
+        def col(name):
+            return _Expression(f"col({name})")
+
+        @staticmethod
+        def coalesce(*args):
+            values = [arg.value for arg in args]
+            return _Expression(f"coalesce({', '.join(values)})")
+
+        @staticmethod
+        def lit(value):
+            return _Expression(f"lit({value})")
+
+    class _SparkSessionProxy:
+        """Raise the original pyspark import error when Spark is actually needed."""
+
+        class builder:  # pylint: disable=too-few-public-methods,invalid-name
+            """Builder proxy used in tests via monkeypatch."""
+
+            @staticmethod
+            def getOrCreate():
+                raise ModuleNotFoundError("pyspark is unavailable in this environment") from _PYSPARK_IMPORT_ERROR
+
+    SparkSession = _SparkSessionProxy
+    F = _FallbackFunctions()
 
 STREAMING_QUERY_VERSION = "no_stateful_ops_v1"
 

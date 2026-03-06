@@ -1,15 +1,15 @@
 import argparse
 import json
 
-from pyspark.sql import SparkSession
-
 try:
     from scripts.stream_linking import (
+        SparkSession,
         _reconcile_feedback_by_trace_id,
         _reconcile_feedback_by_tracking_id,
     )
 except ModuleNotFoundError:
     from stream_linking import (
+        SparkSession,
         _reconcile_feedback_by_trace_id,
         _reconcile_feedback_by_tracking_id,
     )
