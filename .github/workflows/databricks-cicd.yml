@@ -18,9 +18,9 @@ jobs:
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-      DATABRICKS_ACCOUNT_ID: ${{ secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: oauth-m2m
       BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
       BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
       BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
@@ -41,7 +41,6 @@ jobs:
             fi
           }
           require DATABRICKS_HOST
-          require DATABRICKS_ACCOUNT_ID
           require DATABRICKS_CLIENT_ID
           require DATABRICKS_CLIENT_SECRET
           require BUNDLE_VAR_env
@@ -63,9 +62,9 @@ jobs:
     env:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-      DATABRICKS_ACCOUNT_ID: ${{ secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: oauth-m2m
       DATABRICKS_WAREHOUSE_ID: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
       FEEDBACK_TABLE: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
       TRACE_TABLE: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
@@ -103,9 +102,9 @@ jobs:
       BUNDLE_VAR_env: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev'}}
       BUNDLE_BIND_APP: ${{ secrets.DAB_BIND_APP == 'true' }}
       DATABRICKS_HOST: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_HOST || secrets.DATABRICKS_DEV_HOST }}
-      DATABRICKS_ACCOUNT_ID: ${{ secrets.DATABRICKS_DEV_ACCOUNT_ID }}
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
+      DATABRICKS_AUTH_TYPE: oauth-m2m
       BUNDLE_VAR_feedback_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
       BUNDLE_VAR_warehouse_id: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
       BUNDLE_VAR_trace_table: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
@@ -126,7 +125,6 @@ jobs:
             fi
           }
           require DATABRICKS_HOST
-          require DATABRICKS_ACCOUNT_ID
           require DATABRICKS_CLIENT_ID
           require DATABRICKS_CLIENT_SECRET
           require BUNDLE_VAR_env
