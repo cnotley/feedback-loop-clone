@@ -67,6 +67,8 @@ jobs:
       DATABRICKS_CLIENT_ID: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_ID || secrets.DATABRICKS_DEV_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.DATABRICKS_PROD_CLIENT_SECRET || secrets.DATABRICKS_DEV_CLIENT_SECRET }}
       DATABRICKS_WAREHOUSE_ID: ${{ github.ref == 'refs/heads/main' && secrets.DAB_WAREHOUSE_ID_PROD || secrets.DAB_WAREHOUSE_ID_DEV }}
+      FEEDBACK_TABLE: ${{ github.ref == 'refs/heads/main' && secrets.DAB_FEEDBACK_TABLE_PROD || secrets.DAB_FEEDBACK_TABLE_DEV }}
+      TRACE_TABLE: ${{ github.ref == 'refs/heads/main' && secrets.DAB_TRACE_TABLE_PROD || secrets.DAB_TRACE_TABLE_DEV }}
 
     steps:
       - uses: actions/checkout@v4
