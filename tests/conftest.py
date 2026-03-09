@@ -1,3 +1,5 @@
+"""Test configuration and shared pytest helpers."""
+
 import os
 import sys
 from pathlib import Path

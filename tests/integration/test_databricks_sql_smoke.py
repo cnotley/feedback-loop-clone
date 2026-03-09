@@ -1,3 +1,5 @@
+"""Databricks SQL integration smoke tests."""
+
 import os
 
 import pytest
